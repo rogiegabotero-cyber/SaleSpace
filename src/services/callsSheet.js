@@ -64,7 +64,27 @@ export function googleSheetTabUrl(rawUrl, gid) {
 }
 
 function sheetCsvUrl(spreadsheetId, sheetName) {
-  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
+  // The cache-busting param defeats Google's own response caching for this
+  // endpoint, which otherwise sometimes keeps serving a stale/wrong tab's
+  // content for a name it briefly failed to resolve (see fetchHandlerCounts).
+  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length)
+  let cursor = 0
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor++
+      results[index] = await fn(items[index], index)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
 }
 
 function decodeXmlEntities(text) {
@@ -137,20 +157,41 @@ export async function fetchHandlerCounts(rawUrl, sheetNames, { handlerHeader = '
   const allowedHandlers = validHandlers?.length ? new Set(validHandlers) : null
   const availableLabelSet = new Set((availableLabels?.length ? availableLabels : ['Available to Call']).map((label) => label.trim().toLowerCase()))
 
-  // Fetched in parallel first; some Google Sheets endpoints silently fall back to another
-  // tab's content for an unrecognized sheet name instead of erroring, so every tab's raw
-  // text is compared afterward (in the order the tabs were requested) to catch that case
-  // rather than double-counting the same rows under two different tab names.
-  const fetched = await Promise.all(names.map(async (name) => {
+  async function fetchTab(name) {
     try {
-      const response = await fetch(sheetCsvUrl(spreadsheetId, name))
+      const response = await fetch(sheetCsvUrl(spreadsheetId, name), { cache: 'no-store' })
       const csvText = await response.text()
       if (!response.ok || csvText.trim().startsWith('<')) return { name, error: 'tab was not found' }
       return { name, csvText }
     } catch (err) {
       return { name, error: err.message }
     }
-  }))
+  }
+
+  // Capped rather than a single Promise.all of every tab: firing 20+ requests at Google's
+  // export endpoint at once is exactly the kind of burst that trips its undocumented rate
+  // limiting, which shows up either as an outright failed response or (worse, silently) as
+  // one tab's request coming back with another tab's content instead of erroring.
+  let fetched = await mapWithConcurrency(names, 6, (name) => fetchTab(name))
+
+  // Whatever still failed outright, or whose text exactly matches an already-accepted
+  // tab's (that silent wrong-tab fallback), gets a few spaced-out retries — each one away
+  // from a fresh burst — before it's finally treated as a real failure/duplicate rather
+  // than reported with different tabs missing on every refresh.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const seenSoFar = new Set()
+    const retryIndexes = []
+    for (let index = 0; index < fetched.length; index++) {
+      const item = fetched[index]
+      if (item.error) { retryIndexes.push(index); continue }
+      if (seenSoFar.has(item.csvText)) retryIndexes.push(index)
+      else seenSoFar.add(item.csvText)
+    }
+    if (!retryIndexes.length) break
+    await sleep(500 * (attempt + 1))
+    const retried = await mapWithConcurrency(retryIndexes, 3, (index) => fetchTab(names[index]))
+    retryIndexes.forEach((index, position) => { fetched[index] = retried[position] })
+  }
 
   const merged = new Map()
   const scanned = []
