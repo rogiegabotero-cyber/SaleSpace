@@ -1,0 +1,144 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function authEmail() {
+      return signedIn() ? request.auth.token.email : null;
+    }
+    function role() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+    function isAdmin() {
+      return role() == 'admin' || role() == 'super_admin';
+    }
+    function isSuperAdmin() {
+      return role() == 'super_admin';
+    }
+    function invitedRole(email) {
+      return get(/databases/$(database)/documents/invites/$(email)).data.role;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // The invite-acceptance clause is listed first so it is evaluated (and can
+      // short-circuit the `||`) before isSuperAdmin()/role(), which read this
+      // same uid's own users/{uid} doc and would throw for a brand-new account
+      // that doesn't have one yet.
+      allow create: if (signedIn() && request.auth.uid == uid
+            && authEmail() != null
+            && exists(/databases/$(database)/documents/invites/$(authEmail()))
+            && request.resource.data.role == invitedRole(authEmail())
+            && request.resource.data.email == authEmail())
+        || isSuperAdmin()
+        || (role() == 'admin' && request.resource.data.role in ['manager', 'visitor']);
+      allow update: if isSuperAdmin()
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'email']));
+      allow delete: if isSuperAdmin();
+    }
+
+    match /employees/{employeeId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.authUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /accountFlags/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin() || (signedIn() && request.auth.uid == uid);
+    }
+
+    match /preferences/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /settings/{settingId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Any signed-in viewer may switch which connected sheet the client dashboard
+    // displays (a shared, team-wide toggle) — narrower than the admin-only write
+    // rule above, so it's carved out as its own more-specific match block.
+    match /settings/callsSheetSelection {
+      allow write: if signedIn();
+    }
+
+    match /callsSheets/{sheetId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Daily call counts are opportunistic telemetry computed by whichever signed-in
+    // viewer happens to have the dashboard open (see services/dailyCalls.js) —
+    // any signed-in user may write, not just admins.
+    match /callsSnapshots/{sheetId} {
+      allow read, write: if signedIn();
+    }
+    match /dailyCalls/{sheetId}/days/{date} {
+      allow read, write: if signedIn();
+    }
+
+    // Overall notes are a shared, team-wide feed: any signed-in user can post one,
+    // and once posted every signed-in user can see it (no per-note access control).
+    match /notes/{noteId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000
+        && request.resource.data.createdAt == request.time;
+      // Only the original author may edit or remove their own note — never someone else's.
+      // Pinning is the one exception: any signed-in viewer may pin/unpin any note,
+      // so that clause is checked independently of authorship.
+      allow update: if signedIn()
+        && ((resource.data.authorUid == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
+              && request.resource.data.text is string
+              && request.resource.data.text.size() > 0
+              && request.resource.data.text.size() <= 2000
+              && request.resource.data.editedAt == request.time)
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinned', 'pinnedAt', 'pinnedBy']));
+      allow delete: if signedIn() && resource.data.authorUid == request.auth.uid;
+
+      // Comments are a shared feed too: any signed-in user can post one, and once
+      // posted every signed-in user can see it. As with notes, only the original
+      // author may edit or remove their own comment.
+      match /comments/{commentId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.createdAt == request.time;
+        allow update: if signedIn()
+          && resource.data.authorUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.editedAt == request.time;
+        allow delete: if signedIn() && resource.data.authorUid == request.auth.uid;
+      }
+    }
+
+    match /invites/{email} {
+      // Own-invite clauses are listed first so they short-circuit before
+      // isAdmin()/role(), which would throw for a brand-new account.
+      allow read: if (signedIn() && authEmail() == email) || isAdmin();
+      allow create: if isAdmin();
+      allow update: if (signedIn() && authEmail() == email
+            && resource.data.status == 'pending'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt', 'acceptedUid'])
+            && request.resource.data.status == 'accepted')
+        || isAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}
