@@ -52,6 +52,14 @@ function dayLabel(dateISO) {
   return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+// The Hyacinth attendance API's exact field name for a log's note isn't
+// documented anywhere in this repo, so this checks every name we've seen an
+// attendance system use for the same thing rather than guessing wrong and
+// silently showing nothing.
+function attendanceNoteOf(log) {
+  return (log.notes || log.note || log.remarks || log.remark || log.comment || log.comments || '').trim()
+}
+
 function firstNameOf(name) {
   return (name || '').trim().split(/\s+/)[0]?.toLowerCase() || ''
 }
@@ -263,6 +271,47 @@ function PercentageRing({ percent }) {
   </svg>
 }
 
+function CallsProgressRing({ handled, available }) {
+  const size = 56
+  const strokeWidth = 10
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const total = handled + available
+  const gap = total > 0 ? 3 : 0
+
+  // Positioned by what's actually drawn (dash, below), not the raw proportional
+  // length — a flat gap subtraction can shrink a tiny-but-nonzero slice's raw
+  // length below zero, so it's floored to a small visible sliver instead. Using
+  // the raw length for the *next* segment's start (rather than this floored
+  // value) let that segment's start creep back before this one's drawn end,
+  // and since it paints on top, it silently covered this slice completely.
+  let offset = 0
+  const segments = [
+    { value: handled, color: 'var(--blue)' },
+    { value: available, color: '#d97706' },
+  ].map((segment) => {
+    if (segment.value <= 0) return null
+    const rawLength = (segment.value / total) * circumference
+    const dash = Math.max(2, rawLength - gap)
+    const circle = { ...segment, dash, dashOffset: -offset }
+    offset += dash + gap
+    return circle
+  })
+
+  // Painted in reverse (available first, handled last) so the handled slice
+  // always sits on top — its rounded stroke cap can slightly overshoot its
+  // nominal length, and whichever segment paints last wins that overlap.
+  const handledPercent = total > 0 ? `${((handled / total) * 100).toFixed(1)}%` : '0%'
+
+  return <div className="calls-progress-ring-wrap">
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="calls-progress-ring">
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--blue-soft)" strokeWidth={strokeWidth} />
+      {[...segments].reverse().map((segment, index) => segment && <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={segment.color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={`${segment.dash} ${circumference - segment.dash}`} strokeDashoffset={segment.dashOffset} transform={`rotate(-90 ${size / 2} ${size / 2})`} />)}
+    </svg>
+    <div className="calls-progress-ring-label">{handledPercent}</div>
+  </div>
+}
+
 function AgentCallsSection({ agentName, displayName, perTab, agentCalls, monthTotal, monthLabel }) {
   const rows = useMemo(() => [...perTab]
     .map((tab) => ({ name: tab.name, count: agentName ? tab.counts.find((item) => item.name === agentName)?.count || 0 : 0 }))
@@ -343,7 +392,7 @@ function AttendanceSection({ person }) {
             <span>{new Date(log.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
             <span>{new Date(log.timestamp).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
             <span className="attendance-status" style={ATTENDANCE_STATUS_COLORS[log.status] ? { color: ATTENDANCE_STATUS_COLORS[log.status], background: `${ATTENDANCE_STATUS_COLORS[log.status]}1a` } : undefined}>{log.status}</span>
-            <span>-</span>
+            <span>{attendanceNoteOf(log) || '-'}</span>
           </div>) : <p className="empty-table">No attendance logs for this range.</p>}
         </div>
       </div>
@@ -477,24 +526,34 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
   // Incomplete (still-available) tabs surface first so the tabs needing attention
   // aren't buried below ones that are already fully worked.
   const sortedPerTab = useMemo(() => [...perTab].sort((a, b) => Number(b.available > 0) - Number(a.available > 0)), [perTab])
+  const totalAvailable = useMemo(() => perTab.reduce((sum, tab) => sum + tab.available, 0), [perTab])
+  const totalHandled = useMemo(() => perTab.reduce((sum, tab) => sum + tab.total, 0), [perTab])
   const [selectedTabName, setSelectedTabName] = useState(null)
   const [selectedPerson, setSelectedPerson] = useState(null)
   const [openStatModal, setOpenStatModal] = useState(null)
+  const [expandedHandlerName, setExpandedHandlerName] = useState(null)
   const selectedTab = perTab.find((tab) => tab.name === selectedTabName) || null
   const maxHandlerCalls = Math.max(1, ...(selectedTab?.counts || []).map((item) => item.count))
 
   function selectTab(name) {
     setSelectedTabName((current) => (current === name ? null : name))
+    setExpandedHandlerName(null)
+  }
+
+  function toggleHandlerStatus(name) {
+    setExpandedHandlerName((current) => (current === name ? null : name))
   }
 
   const tabListRef = useRef(null)
   const [tabListOverflows, setTabListOverflows] = useState(false)
+  const [tabListScrolled, setTabListScrolled] = useState(false)
 
   useEffect(() => {
     const list = tabListRef.current
     if (!list) return undefined
     function updateOverflow() {
       setTabListOverflows(list.scrollHeight - list.scrollTop - list.clientHeight > 8)
+      setTabListScrolled(list.scrollTop > 8)
     }
     updateOverflow()
     list.addEventListener('scroll', updateOverflow)
@@ -507,6 +566,10 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
 
   function scrollTabListDown() {
     tabListRef.current?.scrollBy({ top: tabListRef.current.clientHeight * 0.8, behavior: 'smooth' })
+  }
+
+  function scrollTabListUp() {
+    tabListRef.current?.scrollBy({ top: -tabListRef.current.clientHeight * 0.8, behavior: 'smooth' })
   }
 
   function openTabInSheet(name) {
@@ -542,23 +605,47 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
     <div className={`dashboard-layout ${selectedTab ? 'tab-open' : ''}`}>
       <aside className={`panel tab-sidebar ${selectedTab ? 'drawer-open' : ''}`}>
         <div className="tab-sidebar-list-col">
-          <div className="panel-heading"><div><h2>Calls per tab</h2><p>Click a tab to see its handlers</p></div></div>
+          <div className="panel-heading panel-heading-stack">
+            <div><h2>Calls per tab</h2><p>Click a tab to see its handlers</p></div>
+            <div className="calls-progress-summary">
+              <CallsProgressRing handled={totalHandled} available={totalAvailable} />
+              <div className="calls-progress-legend">
+                <span><i className="calls-progress-dot handled" />Handled <b>{totalHandled}</b></span>
+                <span><i className="calls-progress-dot available" />Available <b>{totalAvailable}</b></span>
+              </div>
+            </div>
+          </div>
           <div className="tab-sidebar-list-wrap">
-            <div className="tab-sidebar-list" ref={tabListRef}>{!sheetUrl ? <p className="empty-table">Not connected.</p> : callsLoading ? <p className="team-status-message">Loading...</p> : callsError ? <p className="team-status-message team-status-error">Couldn't load.</p> : sortedPerTab.length ? sortedPerTab.map((tab) => <button type="button" key={tab.name} className={`tab-sidebar-row ${selectedTabName === tab.name ? 'active' : ''}`} onClick={() => selectTab(tab.name)}><span className="tab-sidebar-name">{tab.name}</span><div className="tab-sidebar-track"><div className={`tab-sidebar-fill ${tab.available > 0 ? 'is-incomplete' : 'is-complete'}`} style={{ width: `${(tab.total / Math.max(1, tab.total + tab.available)) * 100}%` }} /></div><span className="tab-sidebar-value">{tab.total}/{tab.total + tab.available}</span></button>) : <p className="empty-table">No tabs scanned yet.</p>}</div>
-            {tabListOverflows && <button type="button" className="tab-sidebar-scroll-hint" aria-label="Scroll down for more tabs" onClick={scrollTabListDown}><Icon name="chevron" size={16} /></button>}
+            <div className="tab-sidebar-list" ref={tabListRef}>{!sheetUrl ? <p className="empty-table">Not connected.</p> : callsLoading ? <p className="team-status-message">Loading...</p> : callsError ? <p className="team-status-message team-status-error">Couldn't load.</p> : sortedPerTab.length ? sortedPerTab.map((tab) => <button type="button" key={tab.name} className={`tab-sidebar-row ${selectedTabName === tab.name ? 'active' : ''}`} onClick={() => selectTab(tab.name)}><span className="tab-sidebar-name" title={tab.name}>{tab.name}</span><div className="tab-sidebar-track">{tab.total > 0 && <div className="tab-sidebar-fill" style={{ width: `${(tab.total / Math.max(1, tab.total + tab.available)) * 100}%` }} />}</div><span className="tab-sidebar-value">{tab.total}/{tab.total + tab.available}</span></button>) : <p className="empty-table">No tabs scanned yet.</p>}</div>
+            {tabListScrolled && <button type="button" className="tab-sidebar-scroll-hint scroll-up" aria-label="Scroll up" onClick={scrollTabListUp}><Icon name="chevron" size={16} /></button>}
+            {tabListOverflows && <button type="button" className="tab-sidebar-scroll-hint scroll-down" aria-label="Scroll down for more tabs" onClick={scrollTabListDown}><Icon name="chevron" size={16} /></button>}
           </div>
         </div>
         <div className="tab-detail-drawer">{selectedTab && <>
           <div className="tab-detail-header"><div><strong>{selectedTab.name}</strong><small>{selectedTab.total} call{selectedTab.total === 1 ? '' : 's'} logged</small></div><div className="tab-detail-header-actions"><button type="button" className="admin-link" onClick={() => openTabInSheet(selectedTab.name)}>Open in Sheets ↗</button><button type="button" className="icon-button" aria-label="Close" onClick={() => setSelectedTabName(null)}><Icon name="x" size={18} /></button></div></div>
-          <div className="tab-detail-stats">
-            <div className="tab-detail-stat"><small>Total calls</small><strong>{selectedTab.total}</strong></div>
-            <div className="tab-detail-stat"><small>Available to call</small><strong>{selectedTab.available}</strong></div>
+          <div className="calls-progress-summary">
+            <CallsProgressRing handled={selectedTab.total} available={selectedTab.available} />
+            <div className="calls-progress-legend">
+              <span><i className="calls-progress-dot handled" />Handled <b>{selectedTab.total}</b></span>
+              <span><i className="calls-progress-dot available" />Available <b>{selectedTab.available}</b></span>
+            </div>
           </div>
           <div className="tab-detail-body">
             <p className="tab-detail-label">Handlers</p>
             {selectedTab.counts.length ? selectedTab.counts.map((item) => {
               const match = matchEmployeeByName(item.name, people)
-              return <div className="calls-row" key={item.name}>{match?.profileImg ? <img className="avatar avatar-photo avatar-small" src={match.profileImg} alt="" /> : <Avatar initials={initialsOf(match?.name || item.name)} color={match?.color || colorFor(item.name)} small />}<span className="calls-name">{item.name}</span><div className="calls-track"><div className="calls-fill" style={{ width: `${(item.count / maxHandlerCalls) * 100}%` }} /></div><span className="calls-value">{item.count}</span></div>
+              const statuses = selectedTab.statusByHandler[item.name] || []
+              const isExpanded = expandedHandlerName === item.name
+              return <div className="calls-row-wrap" key={item.name}>
+                <button type="button" className="calls-row" onClick={() => toggleHandlerStatus(item.name)} aria-expanded={isExpanded}>
+                  {match?.profileImg ? <img className="avatar avatar-photo avatar-small" src={match.profileImg} alt="" /> : <Avatar initials={initialsOf(match?.name || item.name)} color={match?.color || colorFor(item.name)} small />}
+                  <span className="calls-name">{item.name}</span>
+                  <div className="calls-track"><div className="calls-fill" style={{ width: `${(item.count / maxHandlerCalls) * 100}%` }} /></div>
+                  <span className="calls-value">{item.count}</span>
+                  <Icon name="chevron" size={14} />
+                </button>
+                {isExpanded && <div className="calls-status-breakdown">{statuses.length ? statuses.map((entry) => <div className="calls-status-row" key={entry.status}><span className="calls-status-name">{entry.status}</span><span className="calls-status-value">{entry.count}</span></div>) : <p className="empty-table">No "Status" column found on this tab.</p>}</div>}
+              </div>
             }) : <p className="empty-table">No handlers logged on this tab yet.</p>}
           </div>
         </>}</div>
@@ -607,7 +694,7 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
   </div>
 }
 
-function AttendanceLogPage({ people }) {
+export function AttendanceLogPage({ people }) {
   const [selectedId, setSelectedId] = useState(null)
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(false)
@@ -637,7 +724,7 @@ function AttendanceLogPage({ people }) {
     <AttendanceBreakdown people={people} />
     <div className="attendance-split">
       <section className="panel attendance-list">{people.length ? people.map((person) => <button type="button" key={person.id} className={`attendance-row ${selectedId === person.id ? 'active' : ''}`} onClick={() => selectPerson(person.id)}>{person.profileImg ? <img className="avatar avatar-photo avatar-small" src={person.profileImg} alt="" /> : <Avatar initials={person.initials} color={person.color} small />}<div><strong>{person.name}</strong><small>{person.role}</small></div><span className={person.online ? 'member-status online-text' : 'member-status'}>{person.online ? 'Online' : 'Away'}</span></button>) : <p className="empty-table">No employees synced yet.</p>}</section>
-      <aside className="attendance-drawer">{selected && <><div className="attendance-drawer-header"><div><strong>{selected.name}</strong><small>{selected.role}</small></div><button type="button" className="icon-button" aria-label="Close" onClick={() => setSelectedId(null)}><Icon name="x" size={18} /></button></div><div className="attendance-drawer-body">{loading ? <p className="team-status-message">Loading attendance...</p> : error ? <p className="team-status-message team-status-error">{error}</p> : logs.length ? logs.map((log, index) => <div className="attendance-log-row" key={index}><div className="attendance-log-badges"><span className={`attendance-type ${log.type === 'In' ? 'in' : 'out'}`}>{log.type}</span>{log.status && <span className="attendance-status" style={ATTENDANCE_STATUS_COLORS[log.status] ? { color: ATTENDANCE_STATUS_COLORS[log.status], background: `${ATTENDANCE_STATUS_COLORS[log.status]}1a` } : undefined}>{log.status}</span>}</div><span>{new Date(log.timestamp).toLocaleString()}</span></div>) : <p className="empty-table">No attendance logs this month.</p>}</div></>}</aside>
+      <aside className="attendance-drawer">{selected && <><div className="attendance-drawer-header"><div><strong>{selected.name}</strong><small>{selected.role}</small></div><button type="button" className="icon-button" aria-label="Close" onClick={() => setSelectedId(null)}><Icon name="x" size={18} /></button></div><div className="attendance-drawer-body">{loading ? <p className="team-status-message">Loading attendance...</p> : error ? <p className="team-status-message team-status-error">{error}</p> : logs.length ? logs.map((log, index) => <div className="attendance-log-row" key={index}><div className="attendance-log-row-main"><div className="attendance-log-badges"><span className={`attendance-type ${log.type === 'In' ? 'in' : 'out'}`}>{log.type}</span>{log.status && <span className="attendance-status" style={ATTENDANCE_STATUS_COLORS[log.status] ? { color: ATTENDANCE_STATUS_COLORS[log.status], background: `${ATTENDANCE_STATUS_COLORS[log.status]}1a` } : undefined}>{log.status}</span>}</div><span>{new Date(log.timestamp).toLocaleString()}</span></div>{attendanceNoteOf(log) && <p className="attendance-log-note">{attendanceNoteOf(log)}</p>}</div>) : <p className="empty-table">No attendance logs this month.</p>}</div></>}</aside>
     </div>
   </div>
 }

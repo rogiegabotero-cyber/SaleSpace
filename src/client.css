@@ -1,4 +1,5 @@
 .client-shell {
+  --dashboard-chrome-height: 68px;
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
@@ -7,6 +8,11 @@
     color 0.25s;
 }
 .client-shell.has-panel-switch {
+  /* The panel-switch bar adds its own height above the (still 68px) header,
+     so the dashboard's "fit the remaining viewport" calc below needs to
+     account for it too, or the page ends up taller than 100vh and needs to
+     scroll to see the bottom of the dashboard. */
+  --dashboard-chrome-height: calc(68px + var(--panel-switch-height));
   padding-top: var(--panel-switch-height);
 }
 .client-shell.has-panel-switch .client-header {
@@ -67,6 +73,9 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* .content's own 60px bottom padding is meant for pages that scroll — here
+     it just eats into the fixed viewport height above for no reason. */
+  padding-bottom: 20px;
 }
 .dashboard-hero-row {
   display: flex;
@@ -672,11 +681,60 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.calls-row-wrap {
+  border-radius: 8px;
+}
 .calls-row {
   display: grid;
-  grid-template-columns: 28px 100px 1fr 30px;
+  grid-template-columns: 28px 100px 1fr 30px 16px;
   align-items: center;
   gap: 12px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+.calls-row:hover {
+  background: var(--canvas);
+}
+.calls-row .icon {
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.calls-row[aria-expanded="true"] .icon {
+  transform: rotate(180deg);
+}
+.calls-status-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 6px 8px 46px;
+}
+.calls-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--canvas);
+  font-size: 10.5px;
+}
+.calls-status-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+.calls-status-value {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.calls-status-breakdown .empty-table {
+  padding: 4px 10px;
+  font-size: 10.5px;
 }
 .calls-name {
   color: var(--muted);
@@ -788,6 +846,63 @@
   cursor: pointer;
 }
 
+.panel-heading-stack {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.calls-progress-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center
+  ;
+  gap: 10px;
+  flex: 0 0 auto;
+  width: 100%;
+  border-bottom: solid 0.1px #8b8b8b;
+  padding-bottom: 10px;
+}
+.calls-progress-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.calls-progress-legend b {
+  color: var(--ink);
+  margin-left: 4px;
+}
+.calls-progress-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  margin-right: 5px;
+}
+.calls-progress-dot.handled {
+  background: var(--blue);
+}
+.calls-progress-dot.available {
+  background: #d97706;
+}
+.calls-progress-ring-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+}
+.calls-progress-ring-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 800;
+}
 .panel-heading-actions {
   display: flex;
   align-items: center;
@@ -860,7 +975,6 @@
 }
 .tab-sidebar-scroll-hint {
   position: absolute;
-  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
   display: grid;
@@ -873,13 +987,23 @@
   color: var(--muted);
   box-shadow: var(--shadow);
   cursor: pointer;
-  animation: tab-sidebar-scroll-hint-bob 1.6s ease-in-out infinite;
 }
 .tab-sidebar-scroll-hint:hover {
   color: var(--blue);
   border-color: var(--blue);
 }
-@keyframes tab-sidebar-scroll-hint-bob {
+.tab-sidebar-scroll-hint.scroll-down {
+  bottom: 10px;
+  animation: tab-sidebar-scroll-hint-bob-down 1.6s ease-in-out infinite;
+}
+.tab-sidebar-scroll-hint.scroll-up {
+  top: 10px;
+  animation: tab-sidebar-scroll-hint-bob-up 1.6s ease-in-out infinite;
+}
+.tab-sidebar-scroll-hint.scroll-up .icon {
+  transform: rotate(180deg);
+}
+@keyframes tab-sidebar-scroll-hint-bob-down {
   0%,
   100% {
     transform: translateX(-50%) translateY(0);
@@ -888,48 +1012,60 @@
     transform: translateX(-50%) translateY(3px);
   }
 }
+@keyframes tab-sidebar-scroll-hint-bob-up {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-3px);
+  }
+}
 .tab-sidebar-row {
   display: grid;
-  grid-template-columns: 40px 1fr auto;
+  grid-template-columns: 50px 1fr auto;
   align-items: center;
   gap: 9px;
   width: 100%;
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--line);
+  background: var(--canvas);
   padding: 4px 6px;
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
   text-align: left;
+  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 .tab-sidebar-row:hover {
   background: var(--blue-soft);
+  border-color: var(--blue);
+  box-shadow: 0 1px 5px rgba(56, 103, 244, 0.18);
 }
 .tab-sidebar-row.active {
   background: var(--blue-soft);
+  border-color: var(--blue);
 }
 .tab-sidebar-name {
+  display: block;
+  overflow: hidden;
   color: var(--ink);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .tab-sidebar-track {
   height: 6px;
   border-radius: 4px;
-  background: var(--blue-soft);
+  background: #d97706;
   overflow: hidden;
 }
 .tab-sidebar-fill {
   height: 100%;
   min-width: 3px;
   border-radius: 0 3px 3px 0;
-}
-.tab-sidebar-fill.is-complete {
   background: var(--blue);
-}
-.tab-sidebar-fill.is-incomplete {
-  background: #f2994a;
 }
 .tab-sidebar-value {
   color: var(--muted);
@@ -977,29 +1113,8 @@
   color: var(--muted);
   font-size: 10px;
 }
-.tab-detail-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 16px 20px 0;
-}
-.tab-detail-stat {
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--blue-soft);
-}
-.tab-detail-stat small {
-  display: block;
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 4px;
-}
-.tab-detail-stat strong {
-  font-size: 18px;
-  color: var(--ink);
+.tab-detail-drawer .calls-progress-summary {
+  padding: 16px 20px 14px;
 }
 .tab-detail-body {
   padding: 16px 20px 22px;
@@ -1259,15 +1374,26 @@
 }
 .attendance-log-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 6px;
   padding: 11px 0;
   border-top: 1px solid var(--line);
   font-size: 11px;
 }
 .attendance-log-row:first-child {
   border-top: 0;
+}
+.attendance-log-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.attendance-log-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
 }
 .attendance-type {
   padding: 3px 9px;

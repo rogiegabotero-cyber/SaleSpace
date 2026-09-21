@@ -225,7 +225,7 @@ export async function fetchHandlerCounts(rawUrl, sheetNames, { handlerHeader = '
     const rows = parsedRows.filter((row) => row.some((cell) => !isBlankCell(cell)))
     if (!rows.length) {
       scanned.push(item.name)
-      perTab.push({ name: item.name, total: 0, available: 0, availableRows: [], counts: [] })
+      perTab.push({ name: item.name, total: 0, available: 0, availableRows: [], counts: [], statusByHandler: {} })
       continue
     }
 
@@ -241,9 +241,15 @@ export async function fetchHandlerCounts(rawUrl, sheetNames, { handlerHeader = '
       continue
     }
     const handlerColIndex = rows[headerRowIndex].findIndex((cell) => (cell || '').trim().toLowerCase().startsWith(headerNeedle))
+    // Same header row as Handler, found the same way — a handler's status breakdown
+    // (below) needs to know which rows had which status, so this looks for a column
+    // literally headed "Status" rather than requiring an admin to configure it, since
+    // that's the fixed name this feature expects in the sheet.
+    const statusColIndex = rows[headerRowIndex].findIndex((cell) => (cell || '').trim().toLowerCase().startsWith('status'))
 
     scanned.push(item.name)
     const tabCounts = new Map()
+    const statusByHandler = new Map()
     let available = 0
     const availableRows = []
 
@@ -260,6 +266,12 @@ export async function fetchHandlerCounts(rawUrl, sheetNames, { handlerHeader = '
 
     for (const row of rows.slice(headerRowIndex + 1)) {
       const rawName = (row[handlerColIndex] || '').trim()
+      // A stray repeated header row (e.g. a frozen header Google's export sometimes
+      // emits again below a banner row that itself matched headerNeedle first) would
+      // otherwise read as a real, blank-adjacent value here and fall straight into
+      // the "available" bucket below — skip it outright instead of counting it
+      // either as a handler or as an open slot.
+      if (rawName.toLowerCase() === headerNeedle) continue
       if (rawName) allHandlerNames.add(rawName)
       // Blank cells, a lone "-" (this sheet's own "no data" placeholder), and
       // whichever value is configured to mean "unassigned" (e.g. "Available to
@@ -288,9 +300,19 @@ export async function fetchHandlerCounts(rawUrl, sheetNames, { handlerHeader = '
       if (allowedHandlers && !allowedHandlers.has(rawName)) continue
       merged.set(rawName, (merged.get(rawName) || 0) + 1)
       tabCounts.set(rawName, (tabCounts.get(rawName) || 0) + 1)
+      if (statusColIndex !== -1) {
+        const statusValue = (row[statusColIndex] || '').trim() || 'No status'
+        const handlerStatuses = statusByHandler.get(rawName) || new Map()
+        handlerStatuses.set(statusValue, (handlerStatuses.get(statusValue) || 0) + 1)
+        statusByHandler.set(rawName, handlerStatuses)
+      }
     }
     const tabCountList = [...tabCounts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
-    perTab.push({ name: item.name, total: tabCountList.reduce((sum, entry) => sum + entry.count, 0), available, availableRows, counts: tabCountList })
+    const statusByHandlerObj = Object.fromEntries([...statusByHandler.entries()].map(([name, statusMap]) => [
+      name,
+      [...statusMap.entries()].map(([status, count]) => ({ status, count })).sort((a, b) => b.count - a.count),
+    ]))
+    perTab.push({ name: item.name, total: tabCountList.reduce((sum, entry) => sum + entry.count, 0), available, availableRows, counts: tabCountList, statusByHandler: statusByHandlerObj })
   }
 
   if (!scanned.length) throw new Error('None of the configured sheet tabs could be read. Check the tab names and the sheet\'s sharing settings.')
