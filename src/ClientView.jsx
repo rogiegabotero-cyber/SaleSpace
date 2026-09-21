@@ -120,15 +120,19 @@ function useCallsSheet() {
 
   // Shared by the auto-load effect below and the manual refresh button, so a
   // refresh re-runs the exact same fetch-and-record path instead of drifting
-  // out of sync with it.
+  // out of sync with it. Awaits recordDailyCallDeltas (rather than firing it
+  // and moving on) so the caller's "done" moment is once the Daily calls
+  // panel's Firestore-backed data has actually been written too, not just
+  // once the sheet counts have — otherwise the refresh button can report
+  // done while that panel is still showing pre-refresh numbers.
   const loadCounts = useCallback((sheet, isCancelled) => {
     if (!sheet?.url) return Promise.resolve()
     return fetchHandlerCounts(sheet.url, sheet.sheetNames, { handlerHeader: sheet.handlerHeader, validHandlers: sheet.validHandlers, availableLabels: sheet.availableLabels })
       .then((result) => {
-        if (isCancelled()) return
+        if (isCancelled()) return undefined
         setCounts(result)
         setError('')
-        recordDailyCallDeltas(sheet.id, result.counts).catch((err) => console.error('recordDailyCallDeltas failed', err))
+        return recordDailyCallDeltas(sheet.id, result.counts).catch((err) => console.error('recordDailyCallDeltas failed', err))
       })
       .catch((err) => { if (!isCancelled()) setError(err.message) })
   }, [])

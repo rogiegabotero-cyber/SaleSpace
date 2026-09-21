@@ -299,5 +299,13 @@ export async function fetchHandlerCounts(rawUrl, sheetNames, { handlerHeader = '
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count)
 
+  // Numbers changing between refreshes is otherwise invisible — this makes it possible to
+  // tell, from the browser console, whether a given refresh actually failed to read some
+  // tabs (skipped.length > 0) versus successfully reading all of them but still landing on
+  // different totals (which would point to the sheet's data itself changing, not a fetch
+  // problem).
+  if (skipped.length) console.warn(`[callsSheet] ${skipped.length}/${names.length} tab(s) skipped`, skipped)
+  else console.info(`[callsSheet] all ${scanned.length} tab(s) scanned OK, total calls counted: ${counts.reduce((sum, item) => sum + item.count, 0)}`)
+
   return { counts, scanned, skipped, perTab, allHandlerNames: [...allHandlerNames].sort() }
 }
