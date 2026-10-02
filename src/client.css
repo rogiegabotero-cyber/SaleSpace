@@ -763,19 +763,29 @@
   font-variant-numeric: tabular-nums;
 }
 
+.daily-calls-body {
+  display: flex;
+  align-items: flex-start;
+}
+.daily-calls-names {
+  flex: 0 0 auto;
+  min-width: 0;
+  background: var(--surface);
+  box-shadow: 4px 0 6px -4px rgba(20, 30, 45, 0.15);
+  position: relative;
+  z-index: 1;
+}
 .daily-calls-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow-x: auto;
-  padding: 4px 0px 0px;
 }
 .daily-calls-grid {
   display: grid;
   grid-auto-rows: 34px;
 }
 .daily-calls-corner {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--surface);
+  height: 34px;
   border-bottom: 1px solid var(--line);
 }
 .daily-calls-day-head {
@@ -786,6 +796,21 @@
 }
 .daily-calls-day-head.weekend {
   background: var(--canvas);
+}
+.daily-calls-day-head.today {
+  background: var(--blue-soft);
+  border-top: 1.5px solid var(--blue);
+  border-left: 1.5px solid var(--blue);
+  border-right: 1.5px solid var(--blue);
+}
+.daily-calls-day-head.today strong {
+  color: var(--blue);
+}
+.daily-calls-day-head.other-month {
+  opacity: 0.45;
+}
+.daily-calls-day-head.other-month.month-start {
+  border-left: 1px dashed var(--muted);
 }
 .daily-calls-day-head small {
   color: var(--muted);
@@ -800,14 +825,11 @@
   font-variant-numeric: tabular-nums;
 }
 .daily-calls-name {
-  position: sticky;
-  left: 0;
-  z-index: 1;
+  height: 34px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px 4px 0;
-  background: var(--surface);
+  padding: 4px 10px 4px 12px;
   border-top: 1px solid var(--line);
   color: var(--ink);
   font-size: 11px;
@@ -831,6 +853,19 @@
   color: var(--blue);
   font-weight: 700;
   background: var(--blue-soft);
+}
+.daily-calls-cell.today {
+  border-left: 1.5px solid var(--blue);
+  border-right: 1.5px solid var(--blue);
+}
+.daily-calls-cell.today-last-row {
+  border-bottom: 1.5px solid var(--blue);
+}
+.daily-calls-cell.other-month {
+  opacity: 0.45;
+}
+.daily-calls-cell.other-month.month-start {
+  border-left: 1px dashed var(--muted);
 }
 
 .calls-sheet-switcher {
@@ -860,6 +895,11 @@
   width: 100%;
   border-bottom: solid 0.1px #8b8b8b;
   padding-bottom: 10px;
+}
+.calls-tabs-completed {
+  margin: 0;
+  font-size: 10px;
+  color: var(--muted);
 }
 .calls-progress-legend {
   display: flex;

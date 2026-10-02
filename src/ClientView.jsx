@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isSignInWithEmailLink, signInWithEmailLink, signOut } from 'firebase/auth'
 import './client.css'
 import './admin.css'
@@ -456,32 +456,76 @@ function EmployeeStatsModal({ person, people, monthlyCallTotals, monthTotal, mon
   </div>
 }
 
+const DAILY_CALLS_NAME_COL_WIDTH = 220
+
+function dateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
 function DailyCallsCalendar({ people, callCounts, dailyByDate, year, month }) {
-  const total = daysInMonth(year, month)
-  const days = Array.from({ length: total }, (_, index) => index + 1)
+  const daysThisMonth = daysInMonth(year, month)
+  const nextMonthDate = new Date(year, month + 1, 1)
+  const daysNextMonth = daysInMonth(nextMonthDate.getFullYear(), nextMonthDate.getMonth())
+  const totalColumns = daysThisMonth + daysNextMonth
+  const dates = useMemo(() => Array.from({ length: totalColumns }, (_, index) => new Date(year, month, index + 1)), [year, month, totalColumns])
   const monthLabel = new Date(year, month, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  const todayKey = dateKey(new Date())
+  const scrollRef = useRef(null)
+
+  // Keep today's column centered in the scrollable area (rather than off at
+  // whichever edge the grid happens to start/end on) so it doesn't need to be
+  // hunted for in a two-month-wide table.
+  const centerToday = useCallback(() => {
+    const container = scrollRef.current
+    const todayCell = container?.querySelector('[data-today="true"]')
+    if (!container || !todayCell) return
+    const containerRect = container.getBoundingClientRect()
+    const cellRect = todayCell.getBoundingClientRect()
+    const cellCenter = (cellRect.left - containerRect.left) + container.scrollLeft + cellRect.width / 2
+    const target = cellCenter - container.clientWidth / 2
+    container.scrollLeft = Math.max(0, Math.min(target, container.scrollWidth - container.clientWidth))
+  }, [])
+
+  useEffect(() => {
+    centerToday()
+    const container = scrollRef.current
+    if (!container) return undefined
+    const observer = new ResizeObserver(centerToday)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [centerToday, todayKey, callCounts.length, totalColumns])
 
   return <section className="panel daily-calls">
-    <div className="panel-heading"><div><h2>Daily calls</h2><p>{monthLabel} · calls taken per employee per day</p></div></div>
-    {callCounts.length ? <div className="daily-calls-scroll">
-      <div className="daily-calls-grid" style={{ gridTemplateColumns: `220px repeat(${total}, 32px)` }}>
+    <div className="panel-heading"><div><h2>Daily calls</h2><p>{monthLabel} · calls taken per employee per day, plus next month</p></div></div>
+    {callCounts.length ? <div className="daily-calls-body">
+      <div className="daily-calls-names" style={{ flexBasis: DAILY_CALLS_NAME_COL_WIDTH }}>
         <div className="daily-calls-corner" />
-        {days.map((day) => {
-          const isWeekend = [0, 6].includes(new Date(year, month, day).getDay())
-          return <div key={day} className={`daily-calls-day-head ${isWeekend ? 'weekend' : ''}`}><small>{new Date(year, month, day).toLocaleDateString(undefined, { weekday: 'short' })}</small><strong>{day}</strong></div>
-        })}
         {callCounts.map((item) => {
           const match = matchEmployeeByName(item.name, people)
-          return <Fragment key={item.name}>
-            <div className="daily-calls-name">{match?.profileImg ? <img className="avatar avatar-photo avatar-small" src={match.profileImg} alt="" /> : <Avatar initials={initialsOf(match?.name || item.name)} color={match?.color || colorFor(item.name)} small />}<span>{match?.name || item.name}</span></div>
-            {days.map((day) => {
-              const dateISO = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-              const isWeekend = [0, 6].includes(new Date(year, month, day).getDay())
-              const count = dailyByDate[dateISO]?.[item.name] || 0
-              return <div key={day} className={`daily-calls-cell ${isWeekend ? 'weekend' : ''} ${count ? 'has-calls' : ''}`}>{count || ''}</div>
-            })}
-          </Fragment>
+          return <div className="daily-calls-name" key={item.name}>{match?.profileImg ? <img className="avatar avatar-photo avatar-small" src={match.profileImg} alt="" /> : <Avatar initials={initialsOf(match?.name || item.name)} color={match?.color || colorFor(item.name)} small />}<span>{match?.name || item.name}</span></div>
         })}
+      </div>
+      <div className="daily-calls-scroll" ref={scrollRef}>
+        <div className="daily-calls-grid" style={{ gridTemplateColumns: `repeat(${totalColumns}, 32px)` }}>
+        {dates.map((date) => {
+          const isWeekend = [0, 6].includes(date.getDay())
+          const isToday = dateKey(date) === todayKey
+          const isNextMonth = date.getMonth() !== month
+          const isMonthStart = isNextMonth && date.getDate() === 1
+          return <div key={dateKey(date)} className={`daily-calls-day-head ${isWeekend ? 'weekend' : ''} ${isToday ? 'today' : ''} ${isNextMonth ? 'other-month' : ''} ${isMonthStart ? 'month-start' : ''}`} data-today={isToday || undefined}><small>{date.toLocaleDateString(undefined, { weekday: 'short' })}</small><strong>{date.getDate()}</strong></div>
+        })}
+        {callCounts.flatMap((item, rowIndex) => {
+          const isLastRow = rowIndex === callCounts.length - 1
+          return dates.map((date) => {
+            const isWeekend = [0, 6].includes(date.getDay())
+            const isToday = dateKey(date) === todayKey
+            const isNextMonth = date.getMonth() !== month
+            const isMonthStart = isNextMonth && date.getDate() === 1
+            const count = dailyByDate[dateKey(date)]?.[item.name] || 0
+            return <div key={`${item.name}-${dateKey(date)}`} className={`daily-calls-cell ${isWeekend ? 'weekend' : ''} ${count ? 'has-calls' : ''} ${isToday ? 'today' : ''} ${isToday && isLastRow ? 'today-last-row' : ''} ${isNextMonth ? 'other-month' : ''} ${isMonthStart ? 'month-start' : ''}`}>{count || ''}</div>
+          })
+        })}
+        </div>
       </div>
     </div> : <p className="empty-table">No handler data yet.</p>}
   </section>
@@ -528,6 +572,8 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
   const sortedPerTab = useMemo(() => [...perTab].sort((a, b) => Number(b.available > 0) - Number(a.available > 0)), [perTab])
   const totalAvailable = useMemo(() => perTab.reduce((sum, tab) => sum + tab.available, 0), [perTab])
   const totalHandled = useMemo(() => perTab.reduce((sum, tab) => sum + tab.total, 0), [perTab])
+  // A tab counts as "completed" once it has no open/available rows left.
+  const completedTabCount = useMemo(() => perTab.filter((tab) => tab.available === 0).length, [perTab])
   const [selectedTabName, setSelectedTabName] = useState(null)
   const [selectedPerson, setSelectedPerson] = useState(null)
   const [openStatModal, setOpenStatModal] = useState(null)
@@ -574,7 +620,11 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
 
   function openTabInSheet(name) {
     if (!sheetUrl) return
-    window.open(googleSheetTabUrl(sheetUrl, tabGids[name]), '_blank', 'noopener')
+    try {
+      window.open(googleSheetTabUrl(sheetUrl, tabGids[name]), '_blank', 'noopener')
+    } catch (err) {
+      console.error('[ClientView] could not open sheet tab:', err.message)
+    }
   }
   const { counts: attendanceCounts, loading: attendanceLoading } = useMonthlyAttendance(people)
   const topAttendanceId = useMemo(() => {
@@ -614,6 +664,7 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
                 <span><i className="calls-progress-dot available" />Available <b>{totalAvailable}</b></span>
               </div>
             </div>
+            <p className="calls-tabs-completed">{completedTabCount} of {perTab.length} tabs completed</p>
           </div>
           <div className="tab-sidebar-list-wrap">
             <div className="tab-sidebar-list" ref={tabListRef}>{!sheetUrl ? <p className="empty-table">Not connected.</p> : callsLoading ? <p className="team-status-message">Loading...</p> : callsError ? <p className="team-status-message team-status-error">Couldn't load.</p> : sortedPerTab.length ? sortedPerTab.map((tab) => <button type="button" key={tab.name} className={`tab-sidebar-row ${selectedTabName === tab.name ? 'active' : ''}`} onClick={() => selectTab(tab.name)}><span className="tab-sidebar-name" title={tab.name}>{tab.name}</span><div className="tab-sidebar-track">{tab.total > 0 && <div className="tab-sidebar-fill" style={{ width: `${(tab.total / Math.max(1, tab.total + tab.available)) * 100}%` }} />}</div><span className="tab-sidebar-value">{tab.total}/{tab.total + tab.available}</span></button>) : <p className="empty-table">No tabs scanned yet.</p>}</div>

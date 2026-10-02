@@ -136,6 +136,7 @@ function CallsSheetSettings({ currentEmail }) {
   const [error, setError] = useState('')
   const [tabsLoading, setTabsLoading] = useState(false)
   const [tabsError, setTabsError] = useState('')
+  const [tabGidWarning, setTabGidWarning] = useState('')
   const [lastFetchedUrl, setLastFetchedUrl] = useState('')
   const [handlerHeaderInput, setHandlerHeaderInput] = useState('Handler')
   const [handlerOptions, setHandlerOptions] = useState([])
@@ -163,6 +164,7 @@ function CallsSheetSettings({ currentEmail }) {
     setResult(null)
     setError('')
     setTabsError('')
+    setTabGidWarning('')
     setHandlersError('')
   }
 
@@ -180,6 +182,7 @@ function CallsSheetSettings({ currentEmail }) {
     setResult(null)
     setError('')
     setTabsError('')
+    setTabGidWarning('')
     setHandlersError('')
   }
 
@@ -203,13 +206,15 @@ function CallsSheetSettings({ currentEmail }) {
     if (!trimmedUrl || (!force && trimmedUrl === lastFetchedUrl)) return
     setTabsError('')
     setTabsLoading(true)
+    setTabGidWarning('')
     try {
-      const { title, tabNames, tabGids } = await fetchSheetMetadata(trimmedUrl)
+      const { title, tabNames, tabGids, tabGidWarning: warning } = await fetchSheetMetadata(trimmedUrl)
       setSheetNamesInput(tabNames.join(', '))
-      // Only overwrite if the API lookup actually found something (it silently
-      // returns {} when no key is configured or the lookup fails) — otherwise
-      // keep whatever was already typed in rather than wiping it out.
+      // Only overwrite if the API lookup actually found something (it returns {}
+      // when no key is configured or the lookup fails — see tabGidWarning for why)
+      // — otherwise keep whatever was already typed in rather than wiping it out.
       if (Object.keys(tabGids).length) setTabGidsInput(tabGids)
+      if (warning) setTabGidWarning(warning)
       if (!titleInput.trim()) setTitleInput(title)
       setLastFetchedUrl(trimmedUrl)
     } catch (err) {
@@ -280,6 +285,7 @@ function CallsSheetSettings({ currentEmail }) {
       <label>Tabs to scan (comma-separated — pull the real tabs from your sheet, then remove any summary tabs you don't want scanned){tabsLoading && ' · Reading sheet...'}<input value={sheetNamesInput} onChange={(event) => setSheetNamesInput(event.target.value)} placeholder="Paste the sheet link above to pull in its tabs" required /></label>
       {sheetNames.length > 0 && <div className="tab-gid-section">
         <p className="tab-gid-hint">Pulled in automatically when the sheet link is fetched — lets "Available to call" open the exact tab in Google Sheets. Only fill these in yourself if a tab is missing one below.</p>
+        {tabGidWarning && <div className="form-error admin-error">{tabGidWarning}</div>}
         <div className="tab-gid-grid">{sheetNames.map((name) => <label key={name} className="tab-gid-row"><span>{name}</span><input value={tabGidsInput[name] || ''} onChange={(event) => setTabGid(name, event.target.value)} placeholder="gid (optional)" inputMode="numeric" /></label>)}</div>
       </div>}
       <label>Handler column header (which header names the column each tab's employee names live in — usually "Handler", but not always)<div className="calls-sheet-link-row"><input value={handlerHeaderInput} onChange={(event) => setHandlerHeaderInput(event.target.value)} placeholder="Handler" /><button type="button" className="admin-link" disabled={!urlInput.trim() || !sheetNames.length || handlersLoading} onClick={discoverHandlerNames}>{handlersLoading ? 'Scanning...' : 'Find names'}</button></div></label>

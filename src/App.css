@@ -81,6 +81,14 @@
 }
 .portal.has-panel-switch .main-area {
   padding-top: calc(var(--topbar-height) + var(--panel-switch-height));
+  /* The dashboard fits itself to "100vh minus chrome" (see .content.client-dashboard
+     in client.css) — without this, that calc only knew about the topbar and the
+     dashboard ended up panel-switch-height too tall, spilling below the viewport
+     for anyone who has the panel-switch bar (multiple portal roles). */
+  --dashboard-chrome-height: calc(var(--topbar-height) + var(--panel-switch-height));
+}
+.portal.has-panel-switch .dashboard-overview-wrap {
+  --dashboard-chrome-height: calc(var(--topbar-height) + var(--panel-switch-height) + 64px);
 }
 .sidebar {
   position: fixed;
