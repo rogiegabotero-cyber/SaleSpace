@@ -622,6 +622,16 @@
 .dashboard-main::-webkit-scrollbar-thumb:hover {
   background: var(--muted);
 }
+.dashboard-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+.calls-sheet-switcher.month-filter {
+  max-width: none;
+  padding: 7px 14px;
+  font-size: 12px;
+}
 .dashboard-layout.tab-open .dashboard-main {
   flex-grow: 0;
   opacity: 0;

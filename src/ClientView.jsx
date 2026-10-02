@@ -77,20 +77,26 @@ function matchEmployeeByName(handlerName, people) {
   return matches.length === 1 ? matches[0] : null
 }
 
-function monthRange() {
+function monthRange(monthOffset = 0) {
   const now = new Date()
-  const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-  const endDate = now.toISOString().slice(0, 10)
-  return { startDate, endDate }
+  if (monthOffset === 0) {
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+    const endDate = now.toISOString().slice(0, 10)
+    return { startDate, endDate }
+  }
+  const first = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0)
+  return { startDate: dateKey(first), endDate: dateKey(last) }
 }
 
-function useMonthlyAttendance(people) {
+function useMonthlyAttendance(people, monthOffset = 0) {
   const [counts, setCounts] = useState({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    const { startDate, endDate } = monthRange()
+    queueMicrotask(() => { if (!cancelled) setLoading(true) })
+    const { startDate, endDate } = monthRange(monthOffset)
     Promise.all(people.map(async (person) => {
       try {
         const logs = await hyacinthAttendanceAPI.getAttendanceLogs({ userId: person.id, startDate, endDate })
@@ -106,7 +112,7 @@ function useMonthlyAttendance(people) {
       }
     })
     return () => { cancelled = true }
-  }, [people])
+  }, [people, monthOffset])
 
   return { counts, loading }
 }
@@ -176,15 +182,20 @@ function daysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
 }
 
-function useDailyCalls(sheetId) {
+function useDailyCalls(sheetId, monthOffset = 0) {
   const [byDate, setByDate] = useState({})
   const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth()
-  const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
-  const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth(year, month)).padStart(2, '0')}`
+  const selected = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+  const year = selected.getFullYear()
+  const month = selected.getMonth()
+  const monthStart = dateKey(selected)
+  const monthEnd = dateKey(new Date(year, month + 1, 0))
+  // The calendar also shows the month after the selected one, so the
+  // subscription covers it too; per-month totals filter back down to
+  // monthStart..monthEnd where they're computed.
+  const rangeEnd = dateKey(new Date(year, month + 2, 0))
 
-  useEffect(() => subscribeToDailyCalls(sheetId, monthStart, monthEnd, setByDate, () => {}), [sheetId, monthStart, monthEnd])
+  useEffect(() => subscribeToDailyCalls(sheetId, monthStart, rangeEnd, setByDate, () => {}), [sheetId, monthStart, rangeEnd])
 
   return { byDate, year, month, monthStart, monthEnd }
 }
@@ -448,7 +459,7 @@ function EmployeeStatsModal({ person, people, monthlyCallTotals, monthTotal, mon
           {person.role && <div className="attendance-modal-pills"><span className="attendance-modal-pill">{person.role}</span></div>}
         </div>
       </div>
-      <p className="stat-modal-section-label">Calls this month</p>
+      <p className="stat-modal-section-label">Calls in {monthLabel}</p>
       <AgentCallsSection agentName={agentName} displayName={person.name} perTab={perTab} agentCalls={agentCalls} monthTotal={monthTotal} monthLabel={monthLabel} />
       <p className="stat-modal-section-label">Attendance (last 7 days)</p>
       <AttendanceSection person={person} />
@@ -562,7 +573,8 @@ function OnlineEmployeesPanel({ people, onSelectPerson }) {
 
 export function ClientDashboard({ people, showOnlinePanel = false }) {
   const { sheets: callsSheets, selectedId: selectedSheetId, selectSheet, url: sheetUrl, tabGids, counts: callsResult, loading: callsLoading, refreshing: callsRefreshing, refresh: refreshCalls, error: callsError } = useCallsSheet()
-  const { byDate: dailyByDate, year: dailyYear, month: dailyMonth } = useDailyCalls(selectedSheetId)
+  const [monthOffset, setMonthOffset] = useState(0)
+  const { byDate: dailyByDate, year: dailyYear, month: dailyMonth, monthStart: dailyMonthStart, monthEnd: dailyMonthEnd } = useDailyCalls(selectedSheetId, monthOffset)
   const callCounts = callsResult?.counts || []
   const dailyCallCounts = callCounts.filter((item) => item.name.trim().toLowerCase() !== 'available to call')
   const maxCalls = Math.max(1, ...callCounts.map((item) => item.count))
@@ -626,22 +638,28 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
       console.error('[ClientView] could not open sheet tab:', err.message)
     }
   }
-  const { counts: attendanceCounts, loading: attendanceLoading } = useMonthlyAttendance(people)
+  const { counts: attendanceCounts, loading: attendanceLoading } = useMonthlyAttendance(people, monthOffset)
   const topAttendanceId = useMemo(() => {
     const entries = Object.entries(attendanceCounts)
     if (!entries.length) return null
     return entries.reduce((best, entry) => (entry[1] > (best?.[1] ?? -1) ? entry : best), null)?.[0]
   }, [attendanceCounts])
   const topPerson = people.find((person) => person.id === topAttendanceId)
-  const monthLabel = new Date().toLocaleDateString(undefined, { month: 'long' })
+  const monthLabel = new Date(dailyYear, dailyMonth, 1).toLocaleDateString(undefined, { month: 'long' })
+  const monthOptions = [0, -1].map((offset) => {
+    const now = new Date()
+    const date = new Date(now.getFullYear(), now.getMonth() + offset, 1)
+    return { offset, label: `${date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}${offset === 0 ? ' (this month)' : ''}` }
+  })
 
   const monthlyCallTotals = useMemo(() => {
     const totals = {}
-    for (const dayCounts of Object.values(dailyByDate)) {
+    for (const [date, dayCounts] of Object.entries(dailyByDate)) {
+      if (date < dailyMonthStart || date > dailyMonthEnd) continue
       for (const [name, count] of Object.entries(dayCounts)) totals[name] = (totals[name] || 0) + count
     }
     return totals
-  }, [dailyByDate])
+  }, [dailyByDate, dailyMonthStart, dailyMonthEnd])
   const topAgentName = useMemo(() => {
     const entries = Object.entries(monthlyCallTotals)
     if (!entries.length) return null
@@ -703,6 +721,9 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
       </aside>
 
       <div className="dashboard-main">
+        <div className="dashboard-toolbar">
+          <select className="calls-sheet-switcher month-filter" value={monthOffset} onChange={(event) => setMonthOffset(Number(event.target.value))} aria-label="Switch month">{monthOptions.map((option) => <option key={option.offset} value={option.offset}>{option.label}</option>)}</select>
+        </div>
         <div className="dashboard-hero-row">
           <section className="top-attendance-banner">
             {attendanceLoading ? <div className="top-stat"><p>Loading attendance...</p></div> : topPerson ? <button type="button" className="top-stat top-stat-clickable" onClick={() => setOpenStatModal('attendance')}><div className="avatar-wrap">{topPerson.profileImg ? <img className="avatar avatar-photo avatar-large" src={topPerson.profileImg} alt="" /> : <Avatar initials={topPerson.initials} color={topPerson.color} large />}<span className="top-stat-badge"><Icon name="trophy" size={14} /></span></div><div className="top-stat-info"><small className="top-stat-label">Top attendance</small><small className="top-stat-month">{monthLabel}</small><strong>{topPerson.name}</strong><div className="top-stat-metric"><Icon name="calendar" size={15} /><b>{attendanceCounts[topAttendanceId]}</b><span>day{attendanceCounts[topAttendanceId] === 1 ? '' : 's'} present</span></div></div></button> : <div className="top-stat"><p>Not enough attendance data yet.</p></div>}
