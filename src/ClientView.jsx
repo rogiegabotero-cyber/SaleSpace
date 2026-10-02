@@ -482,6 +482,7 @@ function DailyCallsCalendar({ people, callCounts, dailyByDate, year, month }) {
   const monthLabel = new Date(year, month, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   const todayKey = dateKey(new Date())
   const scrollRef = useRef(null)
+  const [view, setView] = useState('daily')
 
   // Keep today's column centered in the scrollable area (rather than off at
   // whichever edge the grid happens to start/end on) so it doesn't need to be
@@ -504,11 +505,17 @@ function DailyCallsCalendar({ people, callCounts, dailyByDate, year, month }) {
     const observer = new ResizeObserver(centerToday)
     observer.observe(container)
     return () => observer.disconnect()
-  }, [centerToday, todayKey, callCounts.length, totalColumns])
+  }, [centerToday, todayKey, callCounts.length, totalColumns, view])
 
   return <section className="panel daily-calls">
-    <div className="panel-heading"><div><h2>Daily calls</h2><p>{monthLabel} · calls taken per employee per day, plus next month</p></div></div>
-    {callCounts.length ? <div className="daily-calls-body">
+    <div className="panel-heading">
+      <div><h2>{view === 'daily' ? 'Daily calls' : 'Weekly calls'}</h2><p>{view === 'daily' ? `${monthLabel} · calls taken per employee per day, plus next month` : `${monthLabel} · calls taken per employee, week by week`}</p></div>
+      <div className="view-toggle" role="group" aria-label="Calls view">
+        <button type="button" className={`view-toggle-option ${view === 'daily' ? 'active' : ''}`} aria-pressed={view === 'daily'} onClick={() => setView('daily')}>Daily</button>
+        <button type="button" className={`view-toggle-option ${view === 'weekly' ? 'active' : ''}`} aria-pressed={view === 'weekly'} onClick={() => setView('weekly')}>Weekly</button>
+      </div>
+    </div>
+    {view === 'weekly' ? <WeeklyCallsTable people={people} callCounts={callCounts} dailyByDate={dailyByDate} year={year} month={month} /> : callCounts.length ? <div className="daily-calls-body">
       <div className="daily-calls-names" style={{ flexBasis: DAILY_CALLS_NAME_COL_WIDTH }}>
         <div className="daily-calls-corner" />
         {callCounts.map((item) => {
@@ -540,6 +547,61 @@ function DailyCallsCalendar({ people, callCounts, dailyByDate, year, month }) {
       </div>
     </div> : <p className="empty-table">No handler data yet.</p>}
   </section>
+}
+
+// Sunday-to-Saturday weeks clipped to the month, e.g. Oct 1 – Oct 3, Oct 4 – Oct 10.
+function weeksOfMonth(year, month) {
+  const lastDay = daysInMonth(year, month)
+  const weeks = []
+  let startDay = 1
+  while (startDay <= lastDay) {
+    const startDate = new Date(year, month, startDay)
+    const endDay = Math.min(lastDay, startDay + (6 - startDate.getDay()))
+    const endDate = new Date(year, month, endDay)
+    const fmt = (date) => date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    weeks.push({ startKey: dateKey(startDate), endKey: dateKey(endDate), label: `${fmt(startDate)} – ${fmt(endDate)}` })
+    startDay = endDay + 1
+  }
+  return weeks
+}
+
+function WeeklyCallsTable({ people, callCounts, dailyByDate, year, month }) {
+  const weeks = useMemo(() => weeksOfMonth(year, month), [year, month])
+  const todayKey = dateKey(new Date())
+
+  const rows = useMemo(() => callCounts.map((item) => {
+    const perWeek = weeks.map((week) => {
+      let sum = 0
+      for (const [date, counts] of Object.entries(dailyByDate)) {
+        if (date >= week.startKey && date <= week.endKey) sum += counts[item.name] || 0
+      }
+      return sum
+    })
+    return { name: item.name, perWeek, total: perWeek.reduce((a, b) => a + b, 0) }
+  }), [callCounts, dailyByDate, weeks])
+  const weekTotals = weeks.map((_, index) => rows.reduce((sum, row) => sum + row.perWeek[index], 0))
+  const grandTotal = weekTotals.reduce((a, b) => a + b, 0)
+
+  return <>
+    {rows.length ? <div className="weekly-calls-scroll">
+      <div className="weekly-calls-grid" style={{ gridTemplateColumns: `minmax(150px, 1.6fr) repeat(${weeks.length}, minmax(92px, 1fr)) 64px` }}>
+        <div className="weekly-calls-head weekly-calls-name-head">Employee</div>
+        {weeks.map((week) => <div key={week.startKey} className={`weekly-calls-head ${todayKey >= week.startKey && todayKey <= week.endKey ? 'current' : ''}`}>{week.label}</div>)}
+        <div className="weekly-calls-head weekly-calls-total-head">Total</div>
+        {rows.map((row) => {
+          const match = matchEmployeeByName(row.name, people)
+          return [
+            <div className="weekly-calls-name" key={`${row.name}-name`}>{match?.profileImg ? <img className="avatar avatar-photo avatar-small" src={match.profileImg} alt="" /> : <Avatar initials={initialsOf(match?.name || row.name)} color={match?.color || colorFor(row.name)} small />}<span>{match?.name || row.name}</span></div>,
+            ...row.perWeek.map((count, index) => <div key={`${row.name}-${weeks[index].startKey}`} className={`weekly-calls-cell ${count ? 'has-calls' : ''}`}>{count || ''}</div>),
+            <div className="weekly-calls-cell weekly-calls-total" key={`${row.name}-total`}>{row.total}</div>,
+          ]
+        })}
+        <div className="weekly-calls-name weekly-calls-foot">Team total</div>
+        {weekTotals.map((count, index) => <div key={weeks[index].startKey} className="weekly-calls-cell weekly-calls-foot">{count}</div>)}
+        <div className="weekly-calls-cell weekly-calls-total weekly-calls-foot">{grandTotal}</div>
+      </div>
+    </div> : <p className="empty-table">No handler data yet.</p>}
+  </>
 }
 
 function OnlineEmployeesPanel({ people, onSelectPerson }) {
