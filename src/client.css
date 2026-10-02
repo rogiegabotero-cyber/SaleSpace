@@ -625,7 +625,50 @@
 .dashboard-toolbar {
   display: flex;
   flex: 0 0 auto;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
+}
+.toolbar-menu {
+  position: relative;
+}
+.toolbar-menu-trigger.active {
+  color: var(--ink);
+}
+.toolbar-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  min-width: 170px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.toolbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+.toolbar-menu-item:hover:not(:disabled) {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.toolbar-menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .calls-sheet-switcher.month-filter {
   max-width: none;

@@ -14,6 +14,7 @@ import { acceptInvite, getInvite } from './services/invites'
 import { subscribeToPreferences, updatePreferences } from './services/preferences'
 import { Avatar, Icon } from './PortalShell'
 import { initialsOf } from './utils/initials'
+import { exportCallsReport, exportCallsReportPdf } from './utils/exportCallsReport'
 import ChangePasswordForm from './ChangePasswordForm'
 import LoadingOverlay from './LoadingOverlay'
 import PageLoading from './PageLoading'
@@ -198,6 +199,24 @@ function useDailyCalls(sheetId, monthOffset = 0) {
   useEffect(() => subscribeToDailyCalls(sheetId, monthStart, rangeEnd, setByDate, () => {}), [sheetId, monthStart, rangeEnd])
 
   return { byDate, year, month, monthStart, monthEnd }
+}
+
+function ExcelFileIcon({ size = 18 }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#e7f4ec" stroke="#1d6f42" strokeWidth="1.2" />
+    <path d="M14 2v5h5" fill="#bfe0cc" stroke="#1d6f42" strokeWidth="1.2" strokeLinejoin="round" />
+    <rect x="2" y="10.5" width="12" height="9" rx="1.6" fill="#1d6f42" />
+    <path d="M5.6 12.6l4.8 4.8m0-4.8l-4.8 4.8" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+}
+
+function PdfFileIcon({ size = 18 }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#fdecea" stroke="#d93025" strokeWidth="1.2" />
+    <path d="M14 2v5h5" fill="#f6c5c0" stroke="#d93025" strokeWidth="1.2" strokeLinejoin="round" />
+    <rect x="2" y="11" width="15" height="8" rx="1.6" fill="#d93025" />
+    <text x="9.5" y="17" textAnchor="middle" fontSize="5.6" fontWeight="800" fontFamily="Arial, Helvetica, sans-serif" fill="#fff">PDF</text>
+  </svg>
 }
 
 function ClientHeader({ activePage, onNavigate, onOpenSettings, darkMode = false, onToggleDarkMode }) {
@@ -727,6 +746,64 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
     if (!entries.length) return null
     return entries.reduce((best, entry) => (entry[1] > (best?.[1] ?? -1) ? entry : best), null)?.[0]
   }, [monthlyCallTotals])
+  const [exporting, setExporting] = useState(null)
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false)
+  const toolbarMenuRef = useRef(null)
+
+  useEffect(() => {
+    if (!toolbarMenuOpen) return undefined
+    function onPointerDown(event) {
+      if (!toolbarMenuRef.current?.contains(event.target)) setToolbarMenuOpen(false)
+    }
+    function onKeyDown(event) {
+      if (event.key === 'Escape') setToolbarMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [toolbarMenuOpen])
+
+  async function exportReport(format) {
+    if (exporting) return
+    setExporting(format)
+    try {
+      const displayName = (name) => matchEmployeeByName(name, people)?.name || name
+      // The current month matches what the Calls per employee chart shows (live
+      // sheet totals); a past month has no sheet snapshot, so it falls back to
+      // the recorded daily totals for that month.
+      const isCurrentMonth = monthOffset === 0
+      const perEmployee = (isCurrentMonth
+        ? dailyCallCounts.map((item) => ({ key: item.name, count: item.count }))
+        : Object.entries(monthlyCallTotals).filter(([name]) => name.trim().toLowerCase() !== 'available to call').map(([name, count]) => ({ key: name, count })))
+        .sort((a, b) => b.count - a.count)
+        .map((item) => ({ name: displayName(item.key), count: item.count }))
+      const handlerKeys = new Set([...dailyCallCounts.map((item) => item.name), ...Object.keys(monthlyCallTotals).filter((name) => name.trim().toLowerCase() !== 'available to call')])
+      const dailyRows = [...handlerKeys].map((key) => ({ key, name: displayName(key) })).sort((a, b) => a.name.localeCompare(b.name))
+      const days = Array.from({ length: daysInMonth(dailyYear, dailyMonth) }, (_, index) => {
+        const date = new Date(dailyYear, dailyMonth, index + 1)
+        return { key: dateKey(date), label: index + 1, weekday: date.toLocaleDateString(undefined, { weekday: 'short' }), weekend: [0, 6].includes(date.getDay()) }
+      })
+      const exportFn = format === 'pdf' ? exportCallsReportPdf : exportCallsReport
+      await exportFn({
+        monthLabel: new Date(dailyYear, dailyMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+        sourceNote: isCurrentMonth ? 'Source: handler totals from the connected calls sheet' : 'Source: daily call records tracked for this month',
+        callsPerEmployee: perEmployee,
+        dailyRows,
+        days,
+        weeks: weeksOfMonth(dailyYear, dailyMonth),
+        dailyByDate,
+      })
+    } catch (err) {
+      console.error('[ClientView] export failed:', err)
+      window.alert(`Couldn't create the report: ${err.message}`)
+    } finally {
+      setExporting(null)
+    }
+  }
+
   const topAgentCalls = topAgentName ? monthlyCallTotals[topAgentName] : 0
   const topAgentMatch = topAgentName ? matchEmployeeByName(topAgentName, people) : null
   const monthlyTotalAllAgents = useMemo(() => Object.values(monthlyCallTotals).reduce((sum, count) => sum + count, 0), [monthlyCallTotals])
@@ -785,6 +862,13 @@ export function ClientDashboard({ people, showOnlinePanel = false }) {
       <div className="dashboard-main">
         <div className="dashboard-toolbar">
           <select className="calls-sheet-switcher month-filter" value={monthOffset} onChange={(event) => setMonthOffset(Number(event.target.value))} aria-label="Switch month">{monthOptions.map((option) => <option key={option.offset} value={option.offset}>{option.label}</option>)}</select>
+          <div className="toolbar-menu" ref={toolbarMenuRef}>
+            <button type="button" className={`icon-button toolbar-menu-trigger ${toolbarMenuOpen ? 'active' : ''}`} aria-label="More actions" aria-haspopup="menu" aria-expanded={toolbarMenuOpen} onClick={() => setToolbarMenuOpen((open) => !open)}><Icon name="more" size={18} /></button>
+            {toolbarMenuOpen && <div className="toolbar-menu-list" role="menu">
+              <button type="button" role="menuitem" className="toolbar-menu-item" disabled={Boolean(exporting) || (!sheetUrl && !callCounts.length)} onClick={() => { setToolbarMenuOpen(false); exportReport('excel') }}><ExcelFileIcon size={18} /><span>{exporting === 'excel' ? 'Preparing...' : 'Export as excel'}</span></button>
+              <button type="button" role="menuitem" className="toolbar-menu-item" disabled={Boolean(exporting) || (!sheetUrl && !callCounts.length)} onClick={() => { setToolbarMenuOpen(false); exportReport('pdf') }}><PdfFileIcon size={18} /><span>{exporting === 'pdf' ? 'Preparing...' : 'Export as PDF'}</span></button>
+            </div>}
+          </div>
         </div>
         <div className="dashboard-hero-row">
           <section className="top-attendance-banner">

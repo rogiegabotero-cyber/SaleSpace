@@ -6,6 +6,7 @@ import {
   Check,
   ChevronDown,
   CircleCheck,
+  EllipsisVertical,
   Clock,
   Eye,
   EyeOff,
@@ -58,6 +59,7 @@ const ICONS = {
   trash: Trash2,
   checkmark: Check,
   refresh: RefreshCw,
+  more: EllipsisVertical,
 }
 
 export function Icon({ name, size = 18 }) {
