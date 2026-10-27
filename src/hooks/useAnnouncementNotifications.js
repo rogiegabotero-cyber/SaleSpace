@@ -1,29 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { subscribeToAnnouncements } from '../services/announcements'
+import { useSyncedReadIds } from './useSyncedReadIds'
 
 // Feeds the bell's notification list with the announcements that are currently active, and
-// tracks which of them this user has already looked at (kept in this browser, per user), so
+// tracks which of them this user has already looked at (kept on their account, so it is the same in every browser), so
 // the bell can show an unread dot.
 const EXPIRY_CHECK_MS = 30 * 1000
 const MAX_STORED = 200
 const PREVIEW_LENGTH = 140
-
-function readRead(storageKey) {
-  try {
-    const raw = window.localStorage.getItem(storageKey)
-    return raw ? new Set(JSON.parse(raw)) : new Set()
-  } catch {
-    return new Set()
-  }
-}
-
-function writeRead(storageKey, ids) {
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify([...ids].slice(-MAX_STORED)))
-  } catch {
-    // Storage can be unavailable (private window); the dot just reappears next visit.
-  }
-}
 
 function timeAgo(date, now) {
   const minutes = Math.floor((now - date.getTime()) / 60000)
@@ -37,8 +21,7 @@ function timeAgo(date, now) {
 export function useAnnouncementNotifications(userId) {
   const [announcements, setAnnouncements] = useState([])
   const [now, setNow] = useState(() => Date.now())
-  const storageKey = `announcementsRead:${userId}`
-  const [readIds, setReadIds] = useState(() => (userId ? readRead(storageKey) : new Set()))
+  const { readIds, loaded, markRead, markManyRead } = useSyncedReadIds(userId, 'announcementsRead', `announcementsRead:${userId}`, MAX_STORED)
 
   useEffect(() => {
     if (!userId) return undefined
@@ -70,25 +53,10 @@ export function useAnnouncementNotifications(userId) {
       }
     }), [announcements, now])
 
-  const unreadIds = useMemo(() => items.filter((item) => !readIds.has(item.id)).map((item) => item.id), [items, readIds])
+  // Nothing counts as unread until the account's list of what was read has arrived.
+  const unreadIds = useMemo(() => (loaded ? items.filter((item) => !readIds.has(item.id)).map((item) => item.id) : []), [items, readIds, loaded])
 
-  const markAllRead = useCallback(() => {
-    setReadIds((current) => {
-      const next = new Set(current)
-      items.forEach((item) => next.add(item.id))
-      writeRead(storageKey, next)
-      return next
-    })
-  }, [items, storageKey])
-
-  // One entry read (when it is clicked), as opposed to all of them.
-  const markRead = useCallback((id) => {
-    setReadIds((current) => {
-      const next = new Set(current).add(id)
-      writeRead(storageKey, next)
-      return next
-    })
-  }, [storageKey])
+  const markAllRead = useCallback(() => markManyRead(items.map((item) => item.id)), [items, markManyRead])
 
   return { items, unreadIds, markAllRead, markRead }
 }

@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { subscribeToNotes } from '../services/notes'
 import { mentionsAccount } from '../utils/mentions'
 import { timeAgo } from '../utils/time'
+import { useSyncedReadIds } from './useSyncedReadIds'
 
 // Notes that mention this account (or the whole team with @ALL), as entries for the bell's
-// notification list, with unread tracking kept in this browser per user. Your own notes never
+// notification list, with unread tracking kept on the user's account. Your own notes never
 // notify you. Only recent ones are listed.
 const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
 // How often the "5m ago" labels (and the 14-day cut-off) are refreshed while the page is open.
@@ -12,28 +13,10 @@ const CLOCK_MS = 60 * 1000
 const MAX_STORED = 200
 const PREVIEW_LENGTH = 140
 
-function readRead(storageKey) {
-  try {
-    const raw = window.localStorage.getItem(storageKey)
-    return raw ? new Set(JSON.parse(raw)) : new Set()
-  } catch {
-    return new Set()
-  }
-}
-
-function writeRead(storageKey, ids) {
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify([...ids].slice(-MAX_STORED)))
-  } catch {
-    // Storage can be unavailable (private window); the dot just reappears next visit.
-  }
-}
-
 export function useMentionNotifications(userId, userEmail) {
   const [notes, setNotes] = useState([])
   const [now, setNow] = useState(() => Date.now())
-  const storageKey = `noteMentionsRead:${userId}`
-  const [readIds, setReadIds] = useState(() => (userId ? readRead(storageKey) : new Set()))
+  const { readIds, loaded, markRead, markManyRead } = useSyncedReadIds(userId, 'noteMentionsRead', `noteMentionsRead:${userId}`, MAX_STORED)
 
   useEffect(() => {
     if (!userId) return undefined
@@ -66,25 +49,10 @@ export function useMentionNotifications(userId, userEmail) {
       })
   }, [notes, userId, userEmail, now])
 
-  const unreadIds = useMemo(() => items.filter((item) => !readIds.has(item.id)).map((item) => item.id), [items, readIds])
+  // Nothing counts as unread until the account's list of what was read has arrived.
+  const unreadIds = useMemo(() => (loaded ? items.filter((item) => !readIds.has(item.id)).map((item) => item.id) : []), [items, readIds, loaded])
 
-  const markAllRead = useCallback(() => {
-    setReadIds((current) => {
-      const next = new Set(current)
-      items.forEach((item) => next.add(item.id))
-      writeRead(storageKey, next)
-      return next
-    })
-  }, [items, storageKey])
-
-  // One entry read (when it is clicked), as opposed to all of them.
-  const markRead = useCallback((id) => {
-    setReadIds((current) => {
-      const next = new Set(current).add(id)
-      writeRead(storageKey, next)
-      return next
-    })
-  }, [storageKey])
+  const markAllRead = useCallback(() => markManyRead(items.map((item) => item.id)), [items, markManyRead])
 
   return { items, unreadIds, markAllRead, markRead }
 }

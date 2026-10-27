@@ -1490,10 +1490,6 @@
   --blue-soft: #1b315b;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
 }
-.dark-mode .brand-logo,
-.dark-mode .client-logo {
-  filter: drop-shadow(0 0 6px rgba(88, 137, 255, 0.7)) drop-shadow(0 0 18px rgba(88, 137, 255, 0.4));
-}
 .dark-mode .announcement {
   background: #182b4d;
   border-color: #274474;

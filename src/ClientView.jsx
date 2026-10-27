@@ -31,8 +31,7 @@ import LoadingOverlay from './LoadingOverlay'
 import PageLoading from './PageLoading'
 import PanelSwitchBar from './PanelSwitchBar'
 import SettingsPage from './SettingsPage'
-import salesLogo from './assets/sales-logo2.webp'
-import salesLogoGlow from './assets/sales-logo2-glow.webp'
+import salesLogo from './assets/sales-logo-chrome.webp'
 
 const EMAIL_FOR_SIGN_IN_KEY = 'emailForSignIn'
 
@@ -404,7 +403,7 @@ function ExportConfirmModal({ format, monthLabel, employeeCount, busy, onConfirm
 
 function ClientHeader({ activePage, onNavigate, onOpenSettings, darkMode = false, onToggleDarkMode }) {
   return <header className="client-header">
-    <img className="client-logo" src={darkMode ? salesLogoGlow : salesLogo} alt="Salespace" />
+    <img className="client-logo" src={salesLogo} alt="Salespace" />
     <nav className="client-nav">
       {NAV_ITEMS.map(([label, icon]) => <button type="button" key={label} className={`client-nav-item ${activePage === label ? 'active' : ''}`} onClick={() => onNavigate(label)}><Icon name={icon} size={15} /><span>{label}</span></button>)}
     </nav>
