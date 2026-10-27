@@ -5,6 +5,7 @@ import { auth } from './firebase'
 import { Icon } from './PortalShell'
 import { roleLabel } from './roles'
 import ConfirmModal from './ConfirmModal'
+import ConfirmSignOut from './ConfirmSignOut'
 
 function Toggle({ checked, onChange, label }) {
   return <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`switch ${checked ? 'on' : ''}`} onClick={() => onChange(!checked)}><span className="switch-thumb" /></button>
@@ -95,6 +96,7 @@ function PasswordSection({ email }) {
 export default function SettingsPage({ user, profile, darkMode, onToggleDarkMode, collapsed, onToggleCollapsed, onSignOut }) {
   const isPortalUser = profile?.source === 'portal'
   const [passwordOpen, setPasswordOpen] = useState(false)
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false)
 
   async function saveName(nextName) {
     await updateDoc(profile.ref, { name: nextName })
@@ -110,6 +112,7 @@ export default function SettingsPage({ user, profile, darkMode, onToggleDarkMode
     <section className="panel settings-panel"><div className="panel-heading"><div><h2>Appearance</h2><p>Saved to your account and applied the next time you sign in.</p></div></div><div className="settings-row"><div><strong>Dark mode</strong><small>Use a dark color theme across the portal.</small></div><Toggle checked={darkMode} onChange={onToggleDarkMode} label="Toggle dark mode" /></div>{onToggleCollapsed && <div className="settings-row"><div><strong>Auto-hide sidebar</strong><small>Keep the sidebar collapsed to icons only.</small></div><Toggle checked={collapsed} onChange={onToggleCollapsed} label="Toggle sidebar auto-hide" /></div>}</section>
     <section className="panel settings-panel"><div className="panel-heading"><div><h2>Account details</h2><p>{isPortalUser ? 'Click the pencil to update a field.' : 'Synced from Hyacinth attendance — ask an administrator to update these.'}</p></div></div><EditableField label="Name" value={profile?.name} editable={isPortalUser} onSave={saveName} /><EditableField label="Email" value={profile?.email} editable={isPortalUser} onSave={saveEmail} /><div className="settings-row"><div><strong>Role</strong><small>Managed by an administrator.</small></div><div className="settings-value"><span>{roleLabel(profile?.role)}</span></div></div></section>
     <section className="panel settings-panel"><button type="button" className="panel-heading settings-disclosure" aria-expanded={passwordOpen} onClick={() => setPasswordOpen(!passwordOpen)}><div><h2>Password</h2><p>Change your account password.</p></div><Icon name="chevron" size={18} /></button>{passwordOpen && <PasswordSection email={user.email} />}</section>
-    {onSignOut && <button type="button" className="admin-link" onClick={onSignOut}>Sign out</button>}
+    {onSignOut && <button type="button" className="admin-link" onClick={() => setConfirmingSignOut(true)}>Sign out</button>}
+    {confirmingSignOut && <ConfirmSignOut onSignOut={onSignOut} onCancel={() => setConfirmingSignOut(false)} />}
   </div>
 }

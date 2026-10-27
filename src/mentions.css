@@ -1,0 +1,88 @@
+/* @mentions: the autocomplete under the note box, and mentions highlighted inside notes. */
+.mention-input {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.note-composer .mention-input input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.mention-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: min(340px, 100%);
+  max-height: 280px;
+  margin: 0;
+  padding: 5px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  list-style: none;
+}
+.mention-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.mention-option.is-active {
+  background: var(--blue-soft);
+}
+.mention-option .avatar {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.mention-option-text {
+  display: grid;
+  min-width: 0;
+}
+.mention-option-text strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-option-text small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-all-badge {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #fff;
+  background: #d97706;
+  font-size: 13px;
+  font-weight: 800;
+}
+.mention {
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-weight: 650;
+}
+.mention.mention-all {
+  color: #b45309;
+  background: rgba(217, 119, 6, 0.16);
+  font-weight: 750;
+}
+@media (max-width: 560px) {
+  .mention-menu {
+    width: 100%;
+  }
+}

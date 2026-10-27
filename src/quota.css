@@ -1,0 +1,158 @@
+/* The daily call quota donut in the workspace heading (QuotaDonut.jsx). */
+.quota-card {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  min-width: 0;
+}
+.quota-ring {
+  position: relative;
+  flex: 0 0 auto;
+  width: 148px;
+  height: 148px;
+}
+.quota-ring svg {
+  display: block;
+}
+.quota-ring-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 1px;
+  text-align: center;
+}
+.quota-ring-label strong {
+  color: var(--ink);
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+}
+.quota-ring-label small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.quota-ring-label span {
+  margin-top: 3px;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 800;
+}
+.quota-ring.is-reached .quota-ring-label span {
+  color: #16a34a;
+}
+.quota-info {
+  min-width: 0;
+}
+.quota-info .eyebrow {
+  margin-bottom: 6px;
+}
+.quota-info h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 26px;
+  letter-spacing: -0.5px;
+}
+.quota-info p.quota-status {
+  max-width: 300px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.quota-info p.quota-status.is-reached {
+  color: #16a34a;
+  font-weight: 700;
+}
+.quota-set {
+  margin-top: 12px;
+}
+.modal-card.quota-modal {
+  width: min(100%, 400px);
+}
+.quota-modal label {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.quota-modal input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+  font-size: 14px;
+}
+.quota-modal input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+@media (max-width: 560px) {
+  .quota-card {
+    gap: 16px;
+  }
+  .quota-ring {
+    width: 120px;
+    height: 120px;
+  }
+  .quota-ring svg {
+    width: 120px;
+    height: 120px;
+  }
+  .quota-ring-label strong {
+    font-size: 28px;
+  }
+  .quota-info h1 {
+    font-size: 21px;
+  }
+}
+
+/* Past the target the ring gets a gold second lap, and the percentage can read 100% or more. */
+.quota-ring.is-reached .quota-ring-label span {
+  color: #16a34a;
+}
+.quota-ring-label small {
+  max-width: 96px;
+  white-space: nowrap;
+}
+
+/* In the workspace heading the donut and its text sit as one group in the middle of their half
+   (between the left edge and the divider before the announcements), not against the left edge. */
+.page-heading.has-announcements > .quota-card {
+  flex: 1 1 0;
+  align-self: center;
+  justify-content: center;
+}
+
+/* The small "Call" / "Calls" under the number in the donut. */
+.quota-ring-label em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* The headline reads "calls/quota" (e.g. 42/130) with the quota part lighter. */
+.quota-ring-label strong {
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+.quota-ring-label .quota-of {
+  margin: 0;
+  color: var(--muted);
+  font-size: inherit;
+  font-weight: 650;
+  letter-spacing: inherit;
+}

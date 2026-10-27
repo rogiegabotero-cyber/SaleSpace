@@ -3,6 +3,9 @@ import { Avatar, Icon } from './PortalShell'
 import { NoteAvatar, NoteComments, NoteEditForm, NoteMenu, NotePinButton } from './NoteControls'
 import { useNoteEditor } from './hooks/useNoteEditor'
 import { createNote, subscribeToNotes } from './services/notes'
+import MentionInput from './MentionInput'
+import NoteText from './NoteText'
+import { extractMentions } from './utils/mentions'
 import { timeAgo } from './utils/time'
 
 const VIEW_MODES = [['Whiteboard', 'grid'], ['Timeline', 'clock'], ['Table', 'table']]
@@ -26,11 +29,11 @@ function sortPinnedFirst(notes) {
 
 export function TimelineNote({ note, currentUser }) {
   const editor = useNoteEditor(note, currentUser.uid)
-  return <article className="note">
+  return <article className="note" data-focus-id={`note:${note.id}`}>
     <NoteAvatar note={note} />
     <div className="note-body">
       <div className="note-meta"><strong>{note.authorName}</strong><span>{timeAgo(note.createdAt)}</span>{note.editedAt && <span className="note-edited-tag">· edited</span>}</div>
-      {editor.editing ? <NoteEditForm editor={editor} /> : <p>{note.text}</p>}
+      {editor.editing ? <NoteEditForm editor={editor} /> : <p><NoteText note={note} /></p>}
       <NoteComments noteId={note.id} currentUser={currentUser} trailing={<NotePinButton editor={editor} />} />
     </div>
     <NoteMenu editor={editor} />
@@ -39,22 +42,22 @@ export function TimelineNote({ note, currentUser }) {
 
 function WhiteboardNote({ note, currentUser }) {
   const editor = useNoteEditor(note, currentUser.uid)
-  return <article className={`sticky-note sticky-${note.authorColor || 'blue'}`}>
+  return <article className={`sticky-note sticky-${note.authorColor || 'blue'}`} data-focus-id={`note:${note.id}`}>
     <div className="sticky-note-header">
       <NoteAvatar note={note} small />
       <div className="sticky-note-header-info"><strong>{note.authorName}</strong><span>{timeAgo(note.createdAt)}{note.editedAt ? ' · edited' : ''}</span></div>
       <NoteMenu editor={editor} />
     </div>
-    {editor.editing ? <NoteEditForm editor={editor} /> : <p className="sticky-note-text">{note.text}</p>}
+    {editor.editing ? <NoteEditForm editor={editor} /> : <p className="sticky-note-text"><NoteText note={note} /></p>}
     <NoteComments noteId={note.id} currentUser={currentUser} trailing={<NotePinButton editor={editor} />} />
   </article>
 }
 
 function TableNoteRow({ note, currentUser }) {
   const editor = useNoteEditor(note, currentUser.uid)
-  return <tr>
+  return <tr data-focus-id={`note:${note.id}`}>
     <td><div className="table-note-author"><NoteAvatar note={note} small /><span>{note.authorName}</span></div></td>
-    <td className="table-note-text">{editor.editing ? <NoteEditForm editor={editor} /> : <span>{note.text}{note.editedAt && <em className="note-edited-tag"> (edited)</em>}</span>}</td>
+    <td className="table-note-text">{editor.editing ? <NoteEditForm editor={editor} /> : <span><NoteText note={note} />{note.editedAt && <em className="note-edited-tag"> (edited)</em>}</span>}</td>
     <td className="table-note-date">{formatDateTime(note.createdAt)}</td>
     <td className="table-note-actions">
       <div className="table-note-actions-row">
@@ -65,7 +68,7 @@ function TableNoteRow({ note, currentUser }) {
   </tr>
 }
 
-export default function NotesPage({ user, displayName, displayInitials, photoUrl }) {
+export default function NotesPage({ user, displayName, displayInitials, photoUrl, people = [] }) {
   const [mode, setMode] = useState('Whiteboard')
   const [notes, setNotes] = useState([])
   const [note, setNote] = useState('')
@@ -95,6 +98,7 @@ export default function NotesPage({ user, displayName, displayInitials, photoUrl
         authorColor: currentUser.color,
         authorPhoto: currentUser.photoUrl,
         text: trimmed,
+        ...extractMentions(trimmed, people),
       })
       setNote('')
     } catch (err) {
@@ -111,7 +115,7 @@ export default function NotesPage({ user, displayName, displayInitials, photoUrl
     </div>
     <div className="note-composer notes-page-composer">
       {photoUrl ? <img className="avatar avatar-photo avatar-small" src={photoUrl} alt="" /> : <Avatar initials={displayInitials} color={currentUser.color} small />}
-      <input value={note} onChange={(event) => setNote(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && postNote()} placeholder="Share an update with the team..." />
+      <MentionInput value={note} onChange={setNote} onSubmit={postNote} people={people} placeholder="Share an update with the team... (type @ to mention)" />
       <button type="button" onClick={postNote} disabled={!note.trim() || postingNote}>Post</button>
     </div>
     {sortedNotes.length ? <>

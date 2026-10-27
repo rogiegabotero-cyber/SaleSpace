@@ -4,12 +4,14 @@ import './App.css'
 import './admin.css'
 import { useTeamPresence } from './hooks/useTeamPresence'
 import { useAuthGate } from './hooks/useAuthGate'
+import { useDocumentTitle } from './hooks/useDocumentTitle'
+import { useHashRoute } from './hooks/useHashRoute'
 import { Avatar, Icon, PortalShell } from './PortalShell'
 import { initialsOf } from './utils/initials'
 import { auth } from './firebase'
 import { subscribeToPreferences, updatePreferences } from './services/preferences'
 import { createNote, subscribeToNotes } from './services/notes'
-import { roleLabel } from './roles'
+import { canPostAnnouncements, canSetCallQuota, isClientOnlyRole, roleLabel } from './roles'
 import ChangePasswordForm from './ChangePasswordForm'
 import LoadingOverlay from './LoadingOverlay'
 import PageLoading from './PageLoading'
@@ -17,12 +19,28 @@ import PanelSwitchBar from './PanelSwitchBar'
 import SettingsPage from './SettingsPage'
 import NotesPage, { TimelineNote } from './NotesPage'
 import AdminPage from './AdminPage'
+import AnnouncementAlert from './AnnouncementAlert'
+import QuotaAlert from './QuotaAlert'
+import MentionAlert from './MentionAlert'
+import Announcements from './Announcements'
+import EasternClock from './EasternClock'
+import MentionInput from './MentionInput'
+import { extractMentions } from './utils/mentions'
+import { listenForFocus } from './utils/focusTarget'
+import AppointmentCelebration from './AppointmentCelebration'
 import ClientView, { AttendanceLogPage, ClientDashboard } from './ClientView'
+import ManagementPage from './ManagementPage'
+import QuotaDonut from './QuotaDonut'
+import { WorkspaceCallsProvider, WorkspaceTeamPanel } from './WorkspaceCalls'
 import LoginPage from './LoginPage'
 import VisitorLoginPage from './VisitorLoginPage'
 
-const navItems = [['Dashboard', 'grid'], ['Tasks', 'check'], ['Notes', 'file']]
+const navItems = [['Dashboard', 'grid'], ['Notes', 'file']]
 const manageItems = [['Settings', 'settings']]
+// 'Management' is always a valid address so a refresh on it stays put; whether it is shown is
+// decided by role below.
+const EMPLOYEE_PAGES = [...navItems, ...manageItems].map(([label]) => label).concat('Management')
+const DASHBOARD_VIEWS = ['Workspace', 'Overview', 'Attendance Log']
 const AVATAR_COLORS = ['coral', 'blue', 'purple', 'green']
 
 function colorFor(seed) {
@@ -35,13 +53,16 @@ function Dashboard() {
   const { people, loading: teamLoading, error: teamError } = useTeamPresence(
     import.meta.env.VITE_HYACINTH_DEPARTMENT_ID,
   )
-  const onlineCount = people.filter((person) => person.online).length
   const { user, authChecked, mustChangePassword, setMustChangePassword, profile } = useAuthGate()
   const [collapsed, setCollapsed] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
   const [savingDarkMode, setSavingDarkMode] = useState(false)
-  const [activePage, setActivePage] = useState('Dashboard')
-  const [dashboardView, setDashboardView] = useState('Workspace')
+  const { page: activePage, view: dashboardView, setPage: setActivePage, setView: setDashboardView } = useHashRoute({ pages: EMPLOYEE_PAGES, views: DASHBOARD_VIEWS })
+  // Views stay mounted once opened and are only hidden when another is showing, so
+  // switching tabs (or pages) and coming back doesn't refetch and reload them.
+  const [openedViews, setOpenedViews] = useState(() => new Set(['Workspace']))
+  const dashboardViewLabel = dashboardView === 'Overview' ? 'Work Overview' : dashboardView
+  useDocumentTitle(mustChangePassword ? 'Change password' : activePage === 'Dashboard' ? dashboardViewLabel : activePage)
   const [note, setNote] = useState('')
   const [notes, setNotes] = useState([])
   const [postingNote, setPostingNote] = useState(false)
@@ -55,10 +76,20 @@ function Dashboard() {
     })
   }, [user, mustChangePassword])
 
+  const clientOnly = isClientOnlyRole(profile?.role)
+  // Managers, admins and super admins get the Management page; everyone else is sent back.
+  const canManage = canPostAnnouncements(profile?.role)
   useEffect(() => {
-    if (!user || mustChangePassword !== false) return undefined
+    if (profile !== undefined && activePage === 'Management' && !canManage) setActivePage('Dashboard')
+  }, [profile, activePage, canManage, setActivePage])
+
+  // A clicked notification can point at an announcement or note on this dashboard.
+  useEffect(() => listenForFocus(), [])
+
+  useEffect(() => {
+    if (!user || mustChangePassword !== false || profile === undefined || clientOnly) return undefined
     return subscribeToNotes(setNotes, (err) => console.error('subscribeToNotes failed', err))
-  }, [user, mustChangePassword])
+  }, [user, mustChangePassword, profile, clientOnly])
 
   function toggleCollapsed() {
     const next = !collapsed
@@ -95,6 +126,11 @@ function Dashboard() {
     photoUrl: profile?.photoUrl || null,
   } : null), [user, displayName, displayInitials, profile?.photoUrl])
 
+  function selectDashboardView(view) {
+    setOpenedViews((opened) => (opened.has(view) ? opened : new Set(opened).add(view)))
+    setDashboardView(view)
+  }
+
   const sortedNotes = useMemo(() => [...notes].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))), [notes])
 
   const postNote = async () => {
@@ -109,6 +145,7 @@ function Dashboard() {
         authorColor: currentUser.color,
         authorPhoto: currentUser.photoUrl,
         text: trimmed,
+        ...extractMentions(trimmed, people),
       })
       setNote('')
     } catch (err) {
@@ -126,20 +163,31 @@ function Dashboard() {
   if (mustChangePassword === null) return <PageLoading text="Loading your account..." />
   if (mustChangePassword) return <ChangePasswordForm onDone={() => setMustChangePassword(false)} />
   if (profile === undefined) return <PageLoading text="Loading your account..." />
+  if (clientOnly) {
+    window.location.assign('/client')
+    return null
+  }
 
   return <>
     {savingDarkMode && <LoadingOverlay />}
     <PanelSwitchBar links={panelLinks} darkMode={darkMode} />
-    <PortalShell activePage={activePage} navItems={navItems} manageItems={manageItems} hasPanelSwitch={panelLinks.length > 0} onNavigate={setActivePage} userName={displayName} userRole={displayRole} userPhoto={profile?.photoUrl} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} darkMode={darkMode} onToggleDarkMode={toggleDarkMode} onSignOut={() => signOut(auth).then(() => window.location.assign('/login'))}>
-    {activePage === 'Dashboard' ? <>
-      <div className="dashboard-view-switch-wrap"><div className="dashboard-view-switch"><button type="button" className={`dashboard-view-tab ${dashboardView === 'Workspace' ? 'active' : ''}`} onClick={() => setDashboardView('Workspace')}><Icon name="grid" size={15} /> Workspace</button><button type="button" className={`dashboard-view-tab ${dashboardView === 'Overview' ? 'active' : ''}`} onClick={() => setDashboardView('Overview')}><Icon name="table" size={15} /> Work Overview</button><button type="button" className={`dashboard-view-tab ${dashboardView === 'Attendance Log' ? 'active' : ''}`} onClick={() => setDashboardView('Attendance Log')}><Icon name="clock" size={15} /> Attendance Log</button></div></div>
-      {dashboardView === 'Workspace' ? <div className="content"><div className="page-heading"><div><p className="eyebrow">{todayLabel}</p><h1>Good morning, {displayName.split(' ')[0]} <span>✦</span></h1><p className="heading-copy">Here is what is happening across your workspace today.</p></div><button type="button" className="primary-button" onClick={() => setActivePage('Tasks')}><Icon name="plus" size={17} /> New task</button></div>
-      <section className="announcement announcement-empty"><p className="empty-table">No announcements right now.</p></section>
-      <div className="dashboard-grid"><section className="panel notes-panel"><div className="panel-heading"><div><h2>Overall notes</h2><p>Shared with everyone in your workspace</p></div><button type="button" className="subtle-button" onClick={() => document.querySelector('.note-composer input')?.focus()}><Icon name="plus" size={16} /> Add note</button></div><div className="note-composer">{profile?.photoUrl ? <img className="avatar avatar-photo avatar-small" src={profile.photoUrl} alt="" /> : <Avatar initials={displayInitials} color={colorFor(user.uid)} small />}<input value={note} onChange={(event) => setNote(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && postNote()} placeholder="Share an update with the team..." /><button type="button" onClick={postNote} disabled={!note.trim() || postingNote}>Post</button></div><div className="note-list">{sortedNotes.length ? sortedNotes.map((item) => <TimelineNote key={item.id} note={item} currentUser={currentUser} />) : <p className="empty-table">No notes yet. Share the first update with your team.</p>}</div></section>
-        <section className="panel team-panel"><div className="panel-heading"><div><h2>Team status</h2><p>{people.length} people in your workspace</p></div><button type="button" className="more-button" aria-label="More options">•••</button></div><div className="status-summary"><div><span className="status-dot online" /><strong>{onlineCount}</strong><small>Online</small></div><div><span className="status-dot away" /><strong>{people.length - onlineCount}</strong><small>Away today</small></div></div><div className="team-list">{teamLoading ? <p className="team-status-message">Loading team status...</p> : teamError ? <p className="team-status-message team-status-error">Couldn't load team status: {teamError}</p> : people.length ? people.map((person) => <div className="team-member" key={person.id}><div className="avatar-wrap">{person.profileImg ? <img className="avatar avatar-photo" src={person.profileImg} alt="" /> : <Avatar initials={person.initials} color={person.color} />}<span className={`presence ${person.online ? 'is-online' : ''}`} /></div><div><strong>{person.name}</strong><small>{person.role}</small></div><span className={person.online ? 'member-status online-text' : 'member-status'}>{person.online ? 'Online' : 'Away'}</span></div>) : <p className="team-status-message">No team members synced yet.</p>}</div><button type="button" className="view-all" onClick={() => setActivePage('Settings')}>View team settings <Icon name="arrow" size={15} /></button></section></div>
-      <section className="panel focus-panel"><div className="panel-heading"><div><h2>Your focus</h2><p>Keep an eye on your priorities for today</p></div><button type="button" className="text-button" onClick={() => setActivePage('Tasks')}>View all tasks <Icon name="arrow" size={15} /></button></div><div className="focus-items"><p className="empty-table">No focus items yet.</p></div></section>
-    </div> : dashboardView === 'Overview' ? <div className="dashboard-overview-wrap"><ClientDashboard people={people} /></div> : <AttendanceLogPage people={people} />}
-    </> : activePage === 'Settings' ? <SettingsPage user={user} profile={profile} darkMode={darkMode} onToggleDarkMode={toggleDarkMode} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} /> : activePage === 'Notes' ? <NotesPage user={user} displayName={displayName} displayInitials={displayInitials} photoUrl={profile?.photoUrl} /> : <div className="empty-page"><div className="empty-icon"><Icon name="check" size={28} /></div><p className="eyebrow">{activePage}</p><h1>{`${activePage} are coming together`}</h1><p>This view is ready for the next layer of your workspace. The dashboard is where your latest team activity lives.</p><button type="button" className="primary-button" onClick={() => setActivePage('Dashboard')}>Back to dashboard</button></div>}
+    <PortalShell userId={user.uid} userEmail={user.email} activePage={activePage} navItems={canManage ? [...navItems, ['Management', 'people']] : navItems} manageItems={manageItems} hasPanelSwitch={panelLinks.length > 0} onNavigate={setActivePage} userName={displayName} userRole={displayRole} userPhoto={profile?.photoUrl} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} darkMode={darkMode} onToggleDarkMode={toggleDarkMode} onSignOut={() => signOut(auth).then(() => window.location.assign('/login'))}>
+    <WorkspaceCallsProvider people={people}>
+    <AppointmentCelebration userId={user.uid} people={people} />
+    <AnnouncementAlert userId={user.uid} />
+    <QuotaAlert userId={user.uid} />
+    <MentionAlert userId={user.uid} userEmail={user.email} />
+    <div style={{ display: activePage === 'Dashboard' ? 'contents' : 'none' }}>
+      <div className="dashboard-view-switch-wrap"><div className="dashboard-view-switch"><button type="button" className={`dashboard-view-tab ${dashboardView === 'Workspace' ? 'active' : ''}`} onClick={() => selectDashboardView('Workspace')}><Icon name="grid" size={15} /> Workspace</button><button type="button" className={`dashboard-view-tab ${dashboardView === 'Overview' ? 'active' : ''}`} onClick={() => selectDashboardView('Overview')}><Icon name="table" size={15} /> Work Overview</button><button type="button" className={`dashboard-view-tab ${dashboardView === 'Attendance Log' ? 'active' : ''}`} onClick={() => selectDashboardView('Attendance Log')}><Icon name="clock" size={15} /> Attendance Log</button></div><EasternClock /></div>
+      <div style={{ display: dashboardView === 'Workspace' ? 'contents' : 'none' }}><div className="content"><div className="page-heading has-announcements"><QuotaDonut user={user} updaterName={displayName} people={people} todayLabel={todayLabel} canSetQuota={canSetCallQuota(profile?.role)} /><div className="page-heading-announcements"><Announcements user={user} authorName={displayName} canPost={canPostAnnouncements(profile?.role)} /></div></div>
+      <div className="dashboard-grid"><section className="panel notes-panel"><div className="panel-heading"><div><h2>Overall notes</h2><p>Shared with everyone in your workspace</p></div><button type="button" className="subtle-button" onClick={() => document.querySelector('.note-composer input')?.focus()}><Icon name="plus" size={16} /> Add note</button></div><div className="note-composer">{profile?.photoUrl ? <img className="avatar avatar-photo avatar-small" src={profile.photoUrl} alt="" /> : <Avatar initials={displayInitials} color={colorFor(user.uid)} small />}<MentionInput value={note} onChange={setNote} onSubmit={postNote} people={people} placeholder="Share an update with the team... (type @ to mention)" /><button type="button" onClick={postNote} disabled={!note.trim() || postingNote}>Post</button></div><div className="note-list">{sortedNotes.length ? sortedNotes.map((item) => <TimelineNote key={item.id} note={item} currentUser={currentUser} />) : <p className="empty-table">No notes yet. Share the first update with your team.</p>}</div></section>
+        {teamLoading ? <section className="panel online-mini-panel team-panel"><p className="team-status-message">Loading team status...</p></section> : teamError ? <section className="panel online-mini-panel team-panel"><p className="team-status-message team-status-error">Couldn't load team status: {teamError}</p></section> : <WorkspaceTeamPanel people={people} className="team-panel" />}</div>
+    </div></div>
+      {(openedViews.has('Overview') || dashboardView === 'Overview') && <div style={{ display: dashboardView === 'Overview' ? 'contents' : 'none' }}><div className="dashboard-overview-wrap"><ClientDashboard people={people} peopleLoading={teamLoading} /></div></div>}
+      {(openedViews.has('Attendance Log') || dashboardView === 'Attendance Log') && <div style={{ display: dashboardView === 'Attendance Log' ? 'contents' : 'none' }}><AttendanceLogPage people={people} /></div>}
+    </div>
+    {activePage === 'Settings' ?<SettingsPage user={user} profile={profile} darkMode={darkMode} onToggleDarkMode={toggleDarkMode} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} /> : activePage === 'Notes' ? <NotesPage people={people} user={user} displayName={displayName} displayInitials={displayInitials} photoUrl={profile?.photoUrl} /> : activePage === 'Management' ? (canManage ? <ManagementPage user={user} displayName={displayName} people={people} /> : null) : activePage === 'Dashboard' ? null : <div className="empty-page"><div className="empty-icon"><Icon name="check" size={28} /></div><p className="eyebrow">{activePage}</p><h1>{`${activePage} are coming together`}</h1><p>This view is ready for the next layer of your workspace. The dashboard is where your latest team activity lives.</p><button type="button" className="primary-button" onClick={() => setActivePage('Dashboard')}>Back to dashboard</button></div>}
+    </WorkspaceCallsProvider>
     </PortalShell>
   </>
 }

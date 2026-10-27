@@ -6,7 +6,16 @@ export async function fetchCurrentProfile(uid) {
   const portalSnap = await getDoc(portalRef)
   if (portalSnap.exists()) {
     const data = portalSnap.data()
-    return { name: data.name, email: data.email, role: data.role, photoUrl: null, source: 'portal', ref: portalRef }
+    // A manager promoted from an employee still has their employee record (and its photo); other
+    // portal users (admins, visitors) have none, or can't read it.
+    let photoUrl = null
+    try {
+      const employeeSnap = await getDocs(query(collection(db, 'employees'), where('authUid', '==', uid)))
+      if (!employeeSnap.empty) photoUrl = employeeSnap.docs[0].data().profileImg || null
+    } catch {
+      // No employee record to read; no photo.
+    }
+    return { name: data.name, email: data.email, role: data.role, photoUrl, source: 'portal', ref: portalRef }
   }
 
   const employeeQuery = query(collection(db, 'employees'), where('authUid', '==', uid))

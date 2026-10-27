@@ -95,8 +95,11 @@ function addTitle(sheet, title, subtitle, columnCount) {
 
 // Builds a single .xlsx for the selected month: a calls-per-employee table, its
 // bar chart on its own tab, then the daily and weekly breakdowns each on their
-// own tab. exceljs is imported on demand so it stays out of the main bundle.
-export async function exportCallsReport({ monthLabel, sourceNote, callsPerEmployee, dailyRows, days, weeks, dailyByDate }) {
+// own tab, and (when the sheet has a closed-appointments tab) the closed appointments.
+// exceljs is imported on demand so it stays out of the main bundle.
+// `closedAppointments` is null when no closed-appointments tab is connected (no tab is
+// added), otherwise the rows to list — they aren't month-filtered, matching the dashboard.
+export async function exportCallsReport({ monthLabel, sourceNote, callsPerEmployee, dailyRows, days, weeks, dailyByDate, closedAppointments = null }) {
   const { default: ExcelJS } = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   workbook.created = new Date()
@@ -182,6 +185,33 @@ export async function exportCallsReport({ monthLabel, sourceNote, callsPerEmploy
   })
   const weeklyTotalRow = weekly.addRow(['Team total', ...weekTotals, weekTotals.reduce((a, b) => a + b, 0)])
   styleBodyRow(weeklyTotalRow, { bold: true, fill: GREY })
+
+  // 5 · Closed appointments
+  if (closedAppointments) {
+    const closed = workbook.addWorksheet('Closed appointments', { views: [{ state: 'frozen', xSplit: 0, ySplit: 4 }] })
+    const closedHeaders = ['Handler', 'Name of practice', 'Location', 'POC name', 'POC position', 'Date closed', 'Appointment date/time']
+    addTitle(closed, 'Closed appointments', 'Appointments booked by the team, newest first (all dates, not filtered by month)', closedHeaders.length)
+    closed.columns = [{ width: 26 }, { width: 34 }, { width: 46 }, { width: 26 }, { width: 16 }, { width: 14 }, { width: 26 }]
+    const closedHead = closed.getRow(4)
+    closedHead.values = closedHeaders
+    styleHeaderRow(closedHead)
+    // Free text, so left-aligned and wrapped rather than the centred numbers of the other tabs.
+    const styleTextRow = (row) => row.eachCell((cell) => {
+      cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true }
+    })
+    if (closedAppointments.length) {
+      closedAppointments.forEach((item) => {
+        const added = closed.addRow([item.handler, item.practice, item.location, item.pocName, item.pocPosition, item.dateClosed, item.appointment])
+        styleBodyRow(added)
+        styleTextRow(added)
+      })
+      const closedTotal = closed.addRow(['Total closed', closedAppointments.length, '', '', '', '', ''])
+      styleBodyRow(closedTotal, { bold: true, fill: GREY })
+      styleTextRow(closedTotal)
+    } else {
+      closed.getCell(5, 1).value = 'No closed appointments yet.'
+    }
+  }
 
   const buffer = await workbook.xlsx.writeBuffer()
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })

@@ -1,0 +1,271 @@
+/* Management page (ManagementPage.jsx): tables, chips and the quota / team panels. */
+.management-page .mgmt-tabs {
+  height: auto;
+  margin: 0 0 18px;
+  padding: 0;
+}
+.mgmt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.mgmt-toolbar p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+.mgmt-toolbar p span {
+  color: var(--muted);
+  font-weight: 500;
+}
+.mgmt-error {
+  margin-bottom: 12px;
+}
+.mgmt-table {
+  overflow: hidden;
+}
+.mgmt-row {
+  display: grid;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 12px;
+}
+.mgmt-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mgmt-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.mgmt-head {
+  border-top: 0;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  color: var(--muted);
+  background: var(--canvas);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mgmt-announcements {
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1fr);
+}
+.mgmt-notes {
+  grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+.mgmt-team {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr);
+}
+.mgmt-main strong {
+  display: block;
+  font-size: 12.5px;
+}
+.mgmt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mgmt-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+}
+.mgmt-chip {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--canvas);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 750;
+}
+.mgmt-chip.is-active {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.14);
+}
+.mgmt-chip.is-expired {
+  color: var(--muted);
+  background: var(--canvas);
+}
+.mgmt-chip.is-pinned {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.mgmt-chip.is-important {
+  color: #d97706;
+  background: rgba(217, 119, 6, 0.16);
+}
+
+/* Quota */
+.mgmt-quota {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+}
+.mgmt-quota .eyebrow {
+  margin-bottom: 6px;
+}
+.mgmt-quota p {
+  margin: 0;
+}
+.mgmt-quota p.mgmt-quota-value {
+  color: var(--ink);
+  font-size: 14px;
+}
+.mgmt-quota-value strong {
+  font-size: 30px;
+  letter-spacing: -0.5px;
+}
+.mgmt-quota p.mgmt-quota-note {
+  max-width: 520px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Team today */
+.mgmt-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.mgmt-summary .panel {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+}
+.mgmt-summary small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mgmt-summary strong {
+  color: var(--ink);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.mgmt-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mgmt-person .avatar {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.mgmt-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mgmt-progress small {
+  flex: 0 0 auto;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.mgmt-bar {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--blue-soft);
+}
+.mgmt-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--blue);
+  transition: width 0.4s ease;
+}
+.mgmt-bar i.is-reached {
+  background: #16a34a;
+}
+
+@media (max-width: 900px) {
+  .mgmt-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* Phones: each table row becomes a card, with its columns labelled. */
+@media (max-width: 760px) {
+  .mgmt-head {
+    display: none;
+  }
+  .mgmt-announcements,
+  .mgmt-notes,
+  .mgmt-team {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
+    padding: 14px 16px;
+  }
+  .mgmt-main,
+  .mgmt-person,
+  .mgmt-actions {
+    grid-column: 1 / -1;
+  }
+  .mgmt-row > [data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .mgmt-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .mgmt-quota {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* Call team: a checkbox per employee. */
+.mgmt-callteam {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr);
+}
+.mgmt-pick {
+  cursor: pointer;
+}
+.mgmt-pick:hover {
+  background: var(--canvas);
+}
+.mgmt-pick input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+.mgmt-hint {
+  margin: 12px 2px 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+@media (max-width: 760px) {
+  .mgmt-callteam {
+    grid-template-columns: 1fr 1fr;
+  }
+}

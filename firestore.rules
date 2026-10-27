@@ -19,6 +19,28 @@ service cloud.firestore {
     function isSuperAdmin() {
       return role() == 'super_admin';
     }
+    // Visitors only get the client panel, never the employee workspace. Managers have the
+    // same workspace access as employees.
+    function isClientOnly() {
+      return role() == 'visitor';
+    }
+    // Managers and admins can post announcements to the workspace.
+    function canAnnounce() {
+      return role() == 'manager' || isAdmin();
+    }
+    // Managers and admins set the team's daily call quota.
+    function canSetQuota() {
+      return role() == 'manager' || isAdmin();
+    }
+    // Managers and admins can remove any note (moderation), not only their own.
+    function canModerateNotes() {
+      return role() == 'manager' || isAdmin();
+    }
+    // Signed in and allowed into the employee workspace (employees have no users/{uid}
+    // doc, so role() is null for them and they pass).
+    function workspaceMember() {
+      return signedIn() && !isClientOnly();
+    }
     function invitedRole(email) {
       return get(/databases/$(database)/documents/invites/$(email)).data.role;
     }
@@ -37,9 +59,16 @@ service cloud.firestore {
         || isSuperAdmin()
         || (role() == 'admin' && request.resource.data.role in ['manager', 'visitor']);
       allow update: if isSuperAdmin()
+        // An admin may switch a manager or visitor between those two roles — the same limit
+        // as when creating them — and change nothing else about the account.
+        || (role() == 'admin'
+            && resource.data.role in ['manager', 'visitor']
+            && request.resource.data.role in ['manager', 'visitor']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']))
         || (signedIn() && request.auth.uid == uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'email']));
-      allow delete: if isSuperAdmin();
+      // An admin can also remove a manager (turning a promoted employee back into a plain one).
+      allow delete: if isSuperAdmin() || (role() == 'admin' && resource.data.role == 'manager');
     }
 
     match /employees/{employeeId} {
@@ -68,6 +97,23 @@ service cloud.firestore {
       allow write: if signedIn();
     }
 
+    // The daily call quota: everyone reads it (the general settings rule above); managers and
+    // admins set it, as a whole number.
+    // Who is in charge of calls (the call charts show only them): everyone reads it; managers and
+    // admins set it, as a list of employee ids.
+    match /settings/callHandlers {
+      allow write: if canSetQuota()
+        && request.resource.data.employeeIds is list
+        && request.resource.data.employeeIds.size() <= 500;
+    }
+
+    match /settings/dailyCallQuota {
+      allow write: if canSetQuota()
+        && request.resource.data.value is int
+        && request.resource.data.value >= 1
+        && request.resource.data.value <= 10000;
+    }
+
     match /callsSheets/{sheetId} {
       allow read: if signedIn();
       allow write: if isAdmin();
@@ -83,11 +129,11 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
-    // Overall notes are a shared, team-wide feed: any signed-in user can post one,
-    // and once posted every signed-in user can see it (no per-note access control).
+    // Overall notes are a shared feed for the employee workspace: any non-client user
+    // (employees and admins, never managers or visitors) can read and post (no per-note access control).
     match /notes/{noteId} {
-      allow read: if signedIn();
-      allow create: if signedIn()
+      allow read: if workspaceMember();
+      allow create: if workspaceMember()
         && request.resource.data.authorUid == request.auth.uid
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
@@ -96,7 +142,7 @@ service cloud.firestore {
       // Only the original author may edit or remove their own note — never someone else's.
       // Pinning is the one exception: any signed-in viewer may pin/unpin any note,
       // so that clause is checked independently of authorship.
-      allow update: if signedIn()
+      allow update: if workspaceMember()
         && ((resource.data.authorUid == request.auth.uid
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
               && request.resource.data.text is string
@@ -104,28 +150,52 @@ service cloud.firestore {
               && request.resource.data.text.size() <= 2000
               && request.resource.data.editedAt == request.time)
             || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinned', 'pinnedAt', 'pinnedBy']));
-      allow delete: if signedIn() && resource.data.authorUid == request.auth.uid;
+      allow delete: if workspaceMember() && (resource.data.authorUid == request.auth.uid || canModerateNotes());
 
-      // Comments are a shared feed too: any signed-in user can post one, and once
-      // posted every signed-in user can see it. As with notes, only the original
+      // Comments are a shared feed too: same audience as notes. Once
+      // posted everyone in that audience can see it. As with notes, only the original
       // author may edit or remove their own comment.
       match /comments/{commentId} {
-        allow read: if signedIn();
-        allow create: if signedIn()
+        allow read: if workspaceMember();
+        allow create: if workspaceMember()
           && request.resource.data.authorUid == request.auth.uid
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 1000
           && request.resource.data.createdAt == request.time;
-        allow update: if signedIn()
+        allow update: if workspaceMember()
           && resource.data.authorUid == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 1000
           && request.resource.data.editedAt == request.time;
-        allow delete: if signedIn() && resource.data.authorUid == request.auth.uid;
+        allow delete: if workspaceMember() && resource.data.authorUid == request.auth.uid;
       }
+    }
+
+    // Workspace announcements: everyone in the workspace reads them; managers and admins post.
+    // Managers and admins can edit or remove any of them.
+    match /announcements/{announcementId} {
+      allow read: if workspaceMember();
+      allow create: if canAnnounce()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 120
+        && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp)
+        && request.resource.data.createdAt == request.time;
+      allow update: if canAnnounce()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'text', 'expiresAt', 'editedAt'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 120
+        && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp);
+      allow delete: if canAnnounce();
     }
 
     match /invites/{email} {

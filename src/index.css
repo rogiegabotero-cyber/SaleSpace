@@ -28,3 +28,58 @@ button {
 #root {
   min-height: 100vh;
 }
+
+/* Overlay scrollbars (src/utils/overlayScrollbars.js): the native bars are hidden so
+   they never take layout width, and thin thumbs are drawn above the page instead. */
+* {
+  scrollbar-width: none !important;
+}
+*::-webkit-scrollbar {
+  display: none !important;
+}
+.os-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  pointer-events: none;
+}
+.os-thumb {
+  position: absolute;
+  display: none;
+  border-radius: 999px;
+  background: rgba(120, 132, 148, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    background 0.15s ease;
+}
+.os-thumb.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* A wider invisible hit area so the 6px thumb is easy to grab. */
+.os-thumb::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+.os-thumb:hover,
+.os-thumb.is-dragging {
+  background: rgba(120, 132, 148, 0.85);
+}
+
+/* Set by utils/scrollLock.js while a modal, pop-up or mobile sheet is open: the page behind it
+   does not scroll. Scrollbars are hidden everywhere (above), so this causes no layout shift. */
+html.scroll-locked,
+html.scroll-locked body {
+  overflow: hidden;
+}
+/* Scrolling inside a modal (or a long message in one) never carries on to the page behind it. */
+.modal-overlay,
+.modal-card,
+.celebration-overlay,
+.announcement-alert-overlay,
+.announcement-alert-card {
+  overscroll-behavior: contain;
+}

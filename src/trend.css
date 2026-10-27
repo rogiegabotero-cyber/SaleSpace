@@ -1,0 +1,155 @@
+/* The Calls trend line graph (CallsTrendPanel.jsx). */
+.calls-trend {
+  flex: 0 0 auto;
+}
+.calls-trend-controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.calls-trend-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 28px;
+  padding: 0 21px 6px;
+}
+.calls-trend-stats > span {
+  display: grid;
+  gap: 2px;
+}
+.calls-trend-stats small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.calls-trend-stats b {
+  color: var(--ink);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.calls-trend-stats em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+.calls-trend-legend {
+  display: flex !important;
+  align-items: center;
+  gap: 6px !important;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.calls-trend-legend i {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  margin-left: 8px;
+  border-top: 3px solid var(--blue);
+  border-radius: 2px;
+}
+.calls-trend-legend i:first-child {
+  margin-left: 0;
+}
+.calls-trend-legend i.is-quota {
+  border-top: 2px dashed #d97706;
+}
+.calls-trend-chart {
+  position: relative;
+  padding: 0 0 12px;
+}
+.calls-trend-chart svg {
+  display: block;
+  touch-action: pan-y;
+}
+.trend-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.trend-axis {
+  fill: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.trend-line {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: trend-draw 0.9s ease-out backwards;
+}
+.trend-area {
+  animation: chart-fade-in 0.6s ease-out 0.3s backwards;
+}
+.trend-quota {
+  fill: none;
+  stroke: #d97706;
+  stroke-width: 1.8;
+  stroke-dasharray: 6 5;
+}
+.trend-dot {
+  fill: var(--surface);
+  stroke: var(--blue);
+  stroke-width: 2;
+}
+.trend-guide {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.calls-trend-tip {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  gap: 2px;
+  min-width: 120px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  text-align: center;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+}
+.calls-trend-tip strong {
+  font-size: 11px;
+}
+.calls-trend-tip span {
+  color: var(--blue);
+  font-weight: 750;
+}
+.calls-trend-tip small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+@keyframes trend-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@media (max-width: 760px) {
+  .calls-trend-controls {
+    justify-content: flex-start;
+  }
+  .calls-trend-legend {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trend-line,
+  .trend-area {
+    animation: none;
+  }
+}

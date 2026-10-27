@@ -480,3 +480,66 @@
     flex-basis: 100%;
   }
 }
+
+/* Portal users: the role cell holds a dropdown whose list must not be clipped by the table's
+   rounded edge (rows have no backgrounds of their own, so nothing else needs the clip). */
+.portal-users-table {
+  overflow: visible;
+}
+/* All four columns share the width in proportion (the default last column is a fixed 150px,
+   too narrow for an email address) and long values wrap rather than spill past the edge.
+   Phones use the stacked rows in responsive.css instead. */
+@media (min-width: 761px) {
+  .portal-users-table .table-head,
+  .portal-users-table .employee-row {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.5fr) minmax(0, 0.9fr) minmax(0, 1.5fr);
+  }
+}
+.portal-users-table .employee-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* The rounded corners the table's clip used to provide. */
+.portal-users-table .table-head {
+  border-radius: 10px 10px 0 0;
+}
+.portal-users-table .employee-row:last-child {
+  border-radius: 0 0 10px 10px;
+}
+.portal-user-role .custom-select-trigger {
+  max-width: none;
+  padding: 6px 8px 6px 12px;
+  font-size: 11px;
+}
+
+/* Employees: a Managers column between the account status and the actions. */
+@media (min-width: 761px) {
+  .employees-list .table-head,
+  .employees-list .employee-row {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 0.8fr) minmax(0, 1.5fr) 220px;
+  }
+}
+.employee-managers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.employee-managers em {
+  color: var(--muted);
+  font-style: normal;
+}
+.manager-chip {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+}
+.employee-managers-edit {
+  padding: 3px 10px;
+  font-size: 10px;
+}

@@ -1,0 +1,981 @@
+/* Responsive layout for phones, tablets and other small screens.
+
+   Loaded last (see main.jsx) so these rules win over the desktop styles in App.css,
+   client.css and admin.css without needing !important. Breakpoints, largest first:
+
+     1100px  small laptops / landscape tablets — tighten the side panel
+      900px  tablets and below — the dashboard stops being a fixed-height app screen and
+             becomes a normal scrolling page; panels stack into one column
+      760px  large phones — tables turn into cards, headings wrap
+      560px  phones — modals become bottom sheets, tighter gutters
+      380px  very small phones
+
+   The detail drawers (Calls per tab, Attendance log) are side panels on desktop; on a
+   tablet or phone they open as a bottom sheet over the page instead, so tapping a row
+   doesn't push its details off-screen below a long list. */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+img,
+svg {
+  max-width: 100%;
+}
+
+/* ---------- Small laptops / landscape tablets ---------- */
+@media (max-width: 1100px) {
+  .online-mini-panel {
+    flex-basis: 270px;
+  }
+}
+
+/* A short landscape screen (a phone on its side) can't fit the fixed-height dashboard. */
+@media (max-height: 560px) {
+  .content.client-dashboard {
+    height: auto;
+    overflow: visible;
+  }
+  .dashboard-main {
+    overflow: visible;
+  }
+}
+
+/* ---------- Tablets and below ---------- */
+@media (max-width: 900px) {
+  .client-header {
+    padding-right: max(20px, env(safe-area-inset-right));
+    padding-left: max(20px, env(safe-area-inset-left));
+  }
+
+  /* The dashboard fills the viewport and scrolls inside itself on desktop; here it is
+     just a page that grows with its content. */
+  .content.client-dashboard {
+    height: auto;
+    min-height: calc(100vh - var(--dashboard-chrome-height, 68px));
+    overflow: visible;
+    padding: 14px 16px 28px;
+  }
+  .content.attendance-layout {
+    padding: 22px 16px 36px;
+  }
+  .page-heading {
+    margin-bottom: 20px;
+  }
+
+  .dashboard-layout,
+  .dashboard-layout.tab-open {
+    flex: none;
+    gap: 14px;
+  }
+  .dashboard-main {
+    flex: none;
+    overflow: visible;
+  }
+  .dashboard-layout.tab-open .dashboard-main {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Calls per tab is a sidebar that slides in from the left, opened from the toolbar's
+     "Calls per tab" button, so the general view isn't buried under a long list.
+     It slides by animating `left`, not a transform: a transformed ancestor would trap
+     the detail bottom sheet (position: fixed) inside the sidebar. */
+  .tabs-toggle {
+    display: inline-flex;
+  }
+  /* The desktop hide/show control doesn't apply here; the sidebar has its own button, and
+     a collapsed desktop column mustn't hide the sidebar. */
+  .tabs-hide-toggle,
+  .calls-tab-handle {
+    display: none;
+  }
+  .tab-sidebar {
+    --sidebar-w: min(86vw, 340px);
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: calc(-1 * var(--sidebar-w) - 24px);
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    width: var(--sidebar-w);
+    max-width: none;
+    border-width: 0 1px 0 0;
+    border-radius: 0 16px 16px 0;
+    box-shadow: none;
+    visibility: hidden;
+    transition:
+      left 0.28s ease,
+      box-shadow 0.28s ease,
+      visibility 0s linear 0.28s;
+  }
+  .tab-sidebar.is-sidebar-open {
+    left: 0;
+    box-shadow: 0 0 40px rgba(10, 14, 20, 0.35);
+    visibility: visible;
+    transition:
+      left 0.28s ease,
+      box-shadow 0.28s ease,
+      visibility 0s;
+  }
+  .tab-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    display: block;
+    border: 0;
+    background: rgba(10, 14, 20, 0.5);
+    animation: chart-fade-in 0.2s ease-out;
+  }
+  .tab-sidebar-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    display: inline-grid;
+  }
+  .tab-sidebar-list-col {
+    flex: 1 1 auto;
+    padding-top: 6px;
+  }
+  /* The list is absolutely positioned inside its wrapper (so it can scroll under the
+     scroll-hint arrows); the wrapper takes the sidebar's remaining height. */
+  .tab-sidebar-list-wrap {
+    flex: 1 1 0;
+    min-height: 160px;
+  }
+  .tab-sidebar-list {
+    padding: 4px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  /* Bottom sheets: the tab detail drawer and the attendance drawer. The huge spread
+     shadow dims the page behind without needing a separate backdrop element. */
+  .tab-sidebar:not(.drawer-open) .tab-detail-drawer,
+  .attendance-layout:not(.drawer-open) .attendance-drawer {
+    display: none;
+  }
+  .tab-sidebar.drawer-open .tab-detail-drawer,
+  .attendance-layout.drawer-open .attendance-drawer {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 80;
+    max-height: 88vh;
+    overflow-y: auto;
+    padding-bottom: env(safe-area-inset-bottom);
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 18px 18px 0 0;
+    background: var(--surface);
+    box-shadow: 0 0 0 100vmax rgba(10, 14, 20, 0.5);
+    animation: sheet-up 0.24s ease-out;
+  }
+  .tab-detail-header,
+  .attendance-drawer-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface);
+  }
+  .tab-detail-body,
+  .attendance-drawer-body {
+    max-height: none;
+    overflow: visible;
+  }
+  .attendance-split,
+  .attendance-layout.drawer-open .attendance-split {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .dashboard-hero-row {
+    gap: 14px;
+  }
+  .online-mini-panel {
+    flex: none;
+  }
+  .online-mini-list {
+    flex: 0 0 auto;
+    height: 220px;
+    min-height: 0;
+  }
+  /* "safe center" keeps the first bar reachable when the row is wider than the screen. */
+  .calls-chart-bars {
+    padding: 24px 16px 18px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .top-stat {
+    padding: 12px 16px;
+  }
+  .dashboard-month-row {
+    justify-content: space-between;
+  }
+
+  .breakdown-body {
+    padding: 6px 16px 18px;
+  }
+  .breakdown-footer {
+    padding: 0 16px 18px;
+  }
+
+  /* Touch screens: bigger tap targets. */
+  .icon-button,
+  .client-nav-item,
+  .view-toggle-option,
+  .attendance-filter-chip,
+  .toolbar-menu-item,
+  .custom-select-option {
+    min-height: 38px;
+  }
+  .custom-select-trigger {
+    min-height: 38px;
+  }
+  .view-toggle-option {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+}
+
+/* ---------- Large phones ---------- */
+@media (max-width: 760px) {
+  /* Page navigation moves from the header to a bar fixed along the bottom edge, where a
+     thumb can reach it. The header keeps the logo, dark-mode toggle and settings. */
+  .client-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    justify-content: space-around;
+    gap: 8px;
+    margin: 0;
+    padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: 0 -4px 16px rgba(10, 14, 20, 0.08);
+  }
+  .client-nav-item {
+    flex: 1 1 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    max-width: 160px;
+    min-height: 48px;
+    padding: 6px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+  }
+  /* The label returns under the icon (the header hid it at 620px to save room). */
+  .client-nav-item span {
+    display: inline;
+  }
+  .client-header .theme-toggle {
+    margin-left: auto;
+  }
+  /* With the nav gone from the header the logo has the room; the 26px the older small-
+     screen rule gave it was too small to read. */
+  .client-logo {
+    height: 42px;
+    max-width: 62vw;
+    object-fit: contain;
+    object-position: left center;
+  }
+  /* Keeps the end of every page clear of the bar. */
+  .client-shell {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+
+  .panel-heading {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 16px 16px 12px;
+  }
+  .panel-heading > div:first-child {
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+  .panel-heading-actions {
+    flex-wrap: wrap;
+  }
+  /* Calls per employee: the sheet dropdown stays at the right of the title. Its button is
+     capped narrow (the sheet name is cut with an ellipsis) so the title keeps its room. */
+  .calls-hero .panel-heading {
+    flex-wrap: nowrap;
+  }
+  .calls-hero .panel-heading > div:first-child {
+    flex: 1 1 0;
+  }
+  .calls-hero .panel-heading-actions {
+    flex-wrap: nowrap;
+    margin-left: auto;
+  }
+  .calls-hero .custom-select-trigger {
+    max-width: 128px;
+  }
+  /* Daily / Weekly calls: the toggle stays at the right of the title (the description
+     wraps to make room) instead of dropping onto its own line. */
+  .daily-calls .panel-heading {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .daily-calls .panel-heading > div:first-child {
+    flex: 1 1 0;
+  }
+  .daily-calls .view-toggle {
+    margin-left: auto;
+  }
+  /* Stacked headings (Calls per tab) are a column, where the 200px flex-basis above
+     would become a minimum height and leave a blank gap under the title. */
+  .panel-heading.panel-heading-stack {
+    flex-wrap: nowrap;
+  }
+  .panel-heading-stack > div:first-child {
+    flex: 0 0 auto;
+  }
+
+  /* Daily calls: names collapse to avatars so the day grid gets the width. */
+  .daily-calls-names {
+    flex-basis: 54px !important;
+  }
+  .daily-calls-name {
+    justify-content: center;
+    padding: 4px 0;
+  }
+  .daily-calls-name > span:not(.avatar) {
+    display: none;
+  }
+  .weekly-calls-grid {
+    --name-col: 112px;
+    --week-col: 84px;
+  }
+
+  /* Calls per employee: the vertical columns become a horizontal list — avatar and name,
+     then a bar that runs left to right, then the count after it. */
+  .calls-chart-bars {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 12px;
+    overflow-x: visible;
+    padding: 16px;
+  }
+  .calls-bar-col {
+    flex: none;
+    flex-direction: row;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    /* Room on the right for the count, which sits just outside the track. */
+    padding-right: 40px;
+    box-sizing: border-box;
+  }
+  .calls-bar-col .avatar {
+    order: 1;
+  }
+  .calls-bar-name {
+    order: 2;
+    flex: 0 0 96px;
+    display: block;
+    min-height: 0;
+    max-width: none;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    text-align: left;
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .calls-bar-track {
+    order: 3;
+    flex: 1 1 auto;
+    align-items: stretch;
+    width: auto;
+    height: 12px;
+    border-radius: 6px;
+    background: var(--blue-soft);
+  }
+  .calls-bar-fill {
+    width: var(--bar);
+    height: 100%;
+    border-radius: 6px;
+    transform-origin: left;
+    animation-name: bar-grow-right;
+  }
+  .calls-bar-value {
+    top: 50%;
+    bottom: auto;
+    left: 100%;
+    margin-left: 8px;
+    transform: translateY(-50%);
+  }
+
+  /* Closed appointments: each table row becomes a card. */
+  .closed-appointments-panel .panel-heading > div:first-child {
+    flex: 1 1 100%;
+  }
+  .top-closer {
+    width: 100%;
+  }
+  /* Text is centred in this panel on phones: heading, top closer and each card. */
+  .closed-appointments-panel .panel-heading {
+    justify-content: center;
+    text-align: center;
+  }
+  .top-closer-info {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+  .closed-appointments-row {
+    justify-items: center;
+    text-align: center;
+  }
+  .closed-appointments-handler {
+    justify-content: center;
+  }
+  .closed-appointments-poc {
+    justify-items: center;
+  }
+  .closed-appointments-table {
+    padding: 0 16px 12px;
+  }
+  .closed-appointments-head {
+    display: none;
+  }
+  .closed-appointments-body {
+    max-height: 480px;
+  }
+  .closed-appointments-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px;
+    min-height: 0;
+    padding: 14px 0;
+  }
+  .closed-appointments-handler,
+  .closed-appointments-practice,
+  .closed-appointments-row > [data-label='Location'] {
+    grid-column: 1 / -1;
+  }
+  .closed-appointments-practice {
+    font-size: 13px;
+  }
+  /* Only the handler and practice show until the card's "View more" is tapped. */
+  .closed-appointments-toggle {
+    display: inline-flex;
+    grid-column: 1 / -1;
+    justify-self: center;
+    padding: 4px 0;
+    border: 0;
+    color: var(--blue);
+    background: transparent;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .closed-appointments-row:not(.is-open) > [data-label] {
+    display: none;
+  }
+  .closed-appointments-row > [data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* Attendance: the breakdown table scrolls sideways rather than squashing six columns. */
+  /* The donut wraps onto its own row above the table; centre it there. */
+  .breakdown-body {
+    justify-content: center;
+  }
+  /* The date range is wider than the donut's hole, so it wraps inside it. */
+  .breakdown-ring-label {
+    padding: 0 24px;
+  }
+  .breakdown-ring-label strong:not(.breakdown-total) {
+    font-size: 9px;
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+  .breakdown-table-wrap {
+    flex-basis: 100%;
+  }
+  .breakdown-table {
+    overflow-x: auto;
+  }
+  .breakdown-table-head,
+  .breakdown-table-row {
+    min-width: 460px;
+  }
+
+  /* Employee attendance modal. A grid track is as wide as its content unless told it may
+     shrink, which is what pushed the whole card wider than the screen. */
+  .attendance-modal-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .attendance-modal-info-card,
+  .attendance-modal-logs-card {
+    min-width: 0;
+  }
+  .attendance-modal-identity {
+    overflow-wrap: anywhere;
+  }
+  /* The log table fits the screen instead of scrolling sideways: the Employee column is
+     the same person on every row, so it goes, and the note drops under its row. */
+  .attendance-modal-row {
+    grid-template-columns: 1fr 1fr auto;
+    gap: 4px 10px;
+  }
+  .attendance-modal-row > :nth-child(1) {
+    display: none;
+  }
+  .attendance-modal-head > :nth-child(5) {
+    display: none;
+  }
+  .attendance-modal-rows .attendance-modal-row > :nth-child(5) {
+    grid-column: 1 / -1;
+    color: var(--muted);
+    font-size: 10px;
+  }
+
+  .stat-tab-row {
+    grid-template-columns: 88px 1fr 34px;
+    gap: 10px;
+  }
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 560px) {
+  .panel-switch-bar {
+    gap: 10px;
+    padding: 0 12px;
+    overflow-x: auto;
+  }
+  .panel-switch-label {
+    display: none;
+  }
+  .panel-switch-links {
+    gap: 14px;
+    white-space: nowrap;
+  }
+
+  .client-header {
+    gap: 8px;
+  }
+  .client-nav {
+    gap: 2px;
+  }
+
+  .content.client-dashboard {
+    padding: 12px 12px 24px;
+  }
+  .content.attendance-layout {
+    padding: 18px 12px 30px;
+  }
+  .page-heading h1 {
+    font-size: 21px;
+  }
+
+  .dashboard-toolbar {
+    gap: 6px;
+  }
+  .custom-select.month-filter {
+    flex: 1 1 auto;
+  }
+  .custom-select.month-filter .custom-select-trigger {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .online-mini-list {
+    height: 200px;
+  }
+
+  .weekly-calls-grid {
+    --name-col: 96px;
+    --week-col: 78px;
+  }
+  .weekly-calls-name .avatar {
+    display: none;
+  }
+
+  /* Modals slide up from the bottom edge instead of floating mid-screen. */
+  .modal-overlay {
+    place-items: end center;
+    padding: 0;
+  }
+  .modal-overlay .modal-card {
+    width: 100%;
+    max-width: none;
+    max-height: 92vh;
+    overflow-y: auto;
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    border-radius: 18px 18px 0 0;
+    animation: sheet-up 0.24s ease-out;
+  }
+  .modal-actions {
+    flex-wrap: wrap;
+  }
+  .attendance-modal-grid {
+    gap: 14px;
+  }
+  .attendance-modal-legend-list {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 18px;
+  }
+  .attendance-modal-header {
+    padding-right: 52px;
+    padding-left: 18px;
+    margin-right: -18px;
+    margin-left: -18px;
+  }
+  .modal-overlay .modal-card.attendance-modal-card {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .auth-card {
+    padding: 28px 22px;
+  }
+  .settings-row {
+    flex-wrap: wrap;
+    padding: 14px 16px;
+  }
+}
+
+/* ---------- Very small phones ---------- */
+@media (max-width: 380px) {
+  .client-logo {
+    height: 36px;
+  }
+  .content.client-dashboard {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+  .closed-appointments-row {
+    grid-template-columns: 1fr;
+  }
+  .top-stat {
+    padding: 10px 12px;
+  }
+  .top-stat-info strong {
+    font-size: 13px;
+  }
+}
+
+/* Touch devices: iOS zooms the page when a field under 16px takes focus. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-sidebar.drawer-open .tab-detail-drawer,
+  .attendance-layout.drawer-open .attendance-drawer,
+  .modal-overlay .modal-card {
+    animation: none;
+  }
+}
+
+/* The portal sidebar is always its narrow width on phones, so its toggle square centres. */
+@media (max-width: 620px) {
+  .sidebar .nav-item.sidebar-toggle {
+    margin-right: auto;
+    margin-left: auto;
+  }
+}
+
+/* ======================================================================================
+   Whole app — Employee and Admin panels (PortalShell), settings, notes, admin tables and
+   forms, sign-in pages. Same idea as the client view above: the layout follows the window.
+
+     1024px  tablets and below — the sidebar is always the narrow icon rail (PortalShell
+             turns `collapsed` on from a media query, so the logo swaps to its icon too)
+      760px  phones — the rail becomes a bar along the bottom edge, like the client panel;
+             the account menu moves to an avatar in the top bar
+   ====================================================================================== */
+
+/* The account menu button in the top bar is only for phones, where the sidebar's user card
+   is gone. */
+.topbar-profile {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .popover {
+    max-width: calc(100vw - 28px);
+  }
+}
+
+@media (max-width: 760px) {
+  /* ---- Sidebar -> bottom bar ---- */
+  .portal .sidebar,
+  .portal.has-panel-switch .sidebar {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: space-around;
+    gap: 4px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    overflow: visible;
+    border-top: 1px solid var(--line);
+    border-right: 0;
+    box-shadow: 0 -4px 16px rgba(10, 14, 20, 0.08);
+  }
+  /* Logo, section labels and the user card / sidebar toggle don't fit a bottom bar. */
+  .portal .brand,
+  .portal .nav-label,
+  .portal .sidebar-bottom {
+    display: none;
+  }
+  .portal .sidebar > nav {
+    display: contents;
+  }
+  .portal .sidebar .nav-item {
+    flex: 1 1 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    width: auto;
+    min-width: 0;
+    min-height: 48px;
+    margin: 0;
+    padding: 6px 4px;
+    border-radius: 12px;
+    font-size: 9.5px;
+    text-align: center;
+  }
+  .portal .sidebar .nav-item + .nav-item {
+    margin-top: 0;
+  }
+  /* Labels come back under the icons (the rail hides them), cut with an ellipsis if long. */
+  .portal .sidebar .nav-item span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .portal .sidebar .nav-item b {
+    display: none;
+  }
+
+  /* The Calls per tab sidebar (inside the dashboard) ends above this bar, not over it. */
+  .portal {
+    --tabs-sidebar-bottom: calc(61px + env(safe-area-inset-bottom));
+  }
+
+  /* ---- Main area uses the full width, with room under it for the bar ---- */
+  .portal .main-area {
+    margin-left: 0;
+    padding-bottom: calc(66px + env(safe-area-inset-bottom));
+  }
+  .portal .topbar {
+    left: 0;
+    padding: 0 16px;
+  }
+  .topbar-profile {
+    position: relative;
+    display: block;
+  }
+  .topbar-profile-button {
+    padding: 2px;
+  }
+  .content {
+    padding: 18px 14px 28px;
+  }
+  .dashboard-view-switch-wrap {
+    height: 52px;
+    padding: 0 14px;
+    overflow-x: auto;
+  }
+  .dashboard-view-switch {
+    flex: 0 0 auto;
+  }
+  .dashboard-view-tab {
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+
+  /* ---- Admin: tables become stacked rows that keep every field ---- */
+  .employee-row,
+  .employees-list .employee-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 14px 16px;
+  }
+  .employee-row > span {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .employee-row .row-actions,
+  .employee-row .row-button {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .employee-row .row-actions {
+    margin-top: 4px;
+  }
+  .calls-per-tab-row,
+  .calls-per-tab-row.employee-row {
+    grid-template-columns: 1fr auto;
+  }
+  .admin-page {
+    padding: 24px 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-page {
+    padding: 16px;
+  }
+  .calls-sheet-link-row {
+    flex-wrap: wrap;
+  }
+  .calls-sheet-link-row input {
+    flex: 1 1 100%;
+  }
+  .settings-edit {
+    flex-wrap: wrap;
+  }
+  .settings-edit input {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .admin-stats {
+    grid-template-columns: 1fr;
+  }
+  .invite-form,
+  .add-user-form {
+    padding: 16px;
+  }
+  .page-heading .primary-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ---- Admin → Calls sheet form ----
+   The form is a grid with no column definition, so its single column was as wide as its
+   widest content (the long "Tabs to scan" value, the gid inputs) and pushed everything off
+   the screen. Giving it a column that may shrink, and letting its children shrink too, keeps
+   it inside the page at any width. */
+.calls-sheet-form-full {
+  grid-template-columns: minmax(0, 1fr);
+}
+.calls-sheet-form-full > *,
+.calls-sheet-form-full label,
+.tab-gid-section,
+.tab-gid-row {
+  min-width: 0;
+}
+.calls-sheet-form-full input:not([type='checkbox']) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.calls-sheet-link-row input {
+  min-width: 0;
+}
+.tab-gid-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
+}
+
+@media (max-width: 760px) {
+  .calls-sheet-form-full {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 560px) {
+  /* One tab per line, with room for a readable tab name beside its gid box. */
+  .tab-gid-grid {
+    grid-template-columns: 1fr;
+  }
+  .calls-sheet-form-full .tab-gid-row:has(input:not([type='checkbox'])) {
+    grid-template-columns: minmax(70px, 38%) 1fr;
+  }
+  .tab-gid-row span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Same safeguard for the other admin forms: a bare `1fr` column won't shrink below its
+   input's natural width. */
+@media (max-width: 900px) {
+  .add-user-form,
+  .invite-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .add-user-form input,
+  .add-user-form select,
+  .invite-form input,
+  .invite-form select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* ---- Admin → Calls sheet: tab rows must not overlap ----
+   Each row is [tab name | gid box]. The name column was a fixed 44px, narrower than most
+   tab names ("Closed Appointment", "ContraCosta"), so the name ran across the gid box. The
+   name now gets a real column and is cut with an ellipsis if still too long, and the grid
+   makes each cell wide enough for both. Checkbox rows ([box | name]) size to the box and
+   let the name wrap. */
+.tab-gid-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+}
+.calls-sheet-form-full .tab-gid-row {
+  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+}
+.calls-sheet-form-full .tab-gid-row:has(input[type='checkbox']) {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.tab-gid-row:has(input:not([type='checkbox'])) span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-gid-row:has(input[type='checkbox']) span {
+  overflow-wrap: anywhere;
+}
+
+/* ---- Admin tables: long values stay in their own column ----
+   A URL or email has no spaces to break at, so it ran across the neighbouring column (the
+   connected-sheets table's link over "Tabs"). Cells may now shrink below their content and
+   break anywhere. */
+.employee-row > *,
+.employee-row > div > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

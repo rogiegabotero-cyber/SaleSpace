@@ -88,7 +88,7 @@
   --dashboard-chrome-height: calc(var(--topbar-height) + var(--panel-switch-height));
 }
 .portal.has-panel-switch .dashboard-overview-wrap {
-  --dashboard-chrome-height: calc(var(--topbar-height) + var(--panel-switch-height) + 64px);
+  --dashboard-chrome-height: calc(var(--topbar-height) + var(--panel-switch-height) + 48px);
 }
 .sidebar {
   position: fixed;
@@ -190,39 +190,29 @@
 .sidebar-bottom {
   margin-top: auto;
 }
-.help-box {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0 5px 18px;
-  padding: 12px 8px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-}
-.help-box > span:nth-child(2) {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-.help-box strong {
-  color: var(--ink);
-  font-size: 11px;
-}
-.help-box small {
-  font-size: 10px;
-}
-.help-icon {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid #cad2dc;
-  border-radius: 50%;
-  font-size: 12px;
-}
 .user-card-wrap {
   position: relative;
 }
+/* Collapse / expand control under the user card: a bordered square holding the panel
+   icon. The selector is long enough to beat the .nav-item rules (full width, and the
+   collapsed sidebar's padding) that the button also carries. */
+.sidebar .nav-item.sidebar-toggle {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 6px 8px 0 auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+/* The collapsed (and phone) sidebar is narrow, so the square sits centred in it. */
+.sidebar-collapsed .sidebar .nav-item.sidebar-toggle {
+  margin-right: auto;
+  margin-left: auto;
+}
+/* (When expanded the square sits at the sidebar's right edge, in line with the user
+   card's chevron above it.) */
 .user-card {
   display: flex;
   align-items: center;
@@ -236,7 +226,12 @@
 }
 .user-card > .icon {
   margin-left: auto;
+  transition: transform 0.18s ease;
   color: var(--muted);
+}
+/* The arrow turns over while the account menu is open. */
+.user-card.is-open > .icon {
+  transform: rotate(180deg);
 }
 .user-card strong {
   font-size: 11px;
@@ -351,6 +346,59 @@
   color: var(--muted);
   font-size: 11px;
 }
+/* Announcements that arrived since the list was last opened. */
+/* Clickable entries (announcements, mentions) look like the plain ones, plus a hover. */
+.notifications .notification-item {
+  display: block;
+  width: 100%;
+  margin: 12px 0 0;
+  padding: 0 0 11px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.notifications .notification-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.notifications .notification-item b {
+  color: var(--ink);
+}
+.notifications .notification-item:hover b {
+  color: var(--blue);
+}
+.notifications .notification-item small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+}
+.notifications .notification-item.is-unread {
+  border-left: 3px solid var(--blue);
+  padding-left: 9px;
+}
+.notifications .notification-item.is-important {
+  border-left: 3px solid #d97706;
+  padding-left: 9px;
+}
+.notifications p.is-important {
+  border-left: 3px solid #d97706;
+  padding-left: 9px;
+}
+.notifications p.is-important b {
+  color: #d97706;
+}
+.notifications p.is-unread {
+  padding-left: 9px;
+  border-left: 3px solid var(--blue);
+}
+.notifications {
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
+}
 .notifications p:last-child {
   border: 0;
   padding-bottom: 0;
@@ -386,7 +434,7 @@
   border-radius: 0;
 }
 .dashboard-view-switch-wrap {
-  height: 64px;
+  height: 48px;
   display: flex;
   align-items: center;
   padding: 0 54px;
@@ -423,7 +471,7 @@
   box-shadow: 0 2px 6px rgba(32, 46, 66, 0.08);
 }
 .dashboard-overview-wrap {
-  --dashboard-chrome-height: calc(var(--topbar-height) + 64px);
+  --dashboard-chrome-height: calc(var(--topbar-height) + 48px);
 }
 .content {
   max-width: 1180px;
@@ -538,6 +586,53 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: var(--shadow);
+}
+/* Entrance animation for containers: a short fade and rise when they mount or are
+   shown again (a hidden view coming back replays it). Siblings are staggered a touch
+   so a row of panels settles in sequence rather than all at once. */
+@keyframes container-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes modal-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.panel,
+.announcement,
+.top-attendance-banner,
+.auth-card {
+  animation: container-in 0.35s ease-out backwards;
+}
+.panel:nth-child(2),
+.top-attendance-banner + .panel {
+  animation-delay: 0.05s;
+}
+.panel:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.panel:nth-child(n + 4) {
+  animation-delay: 0.15s;
+}
+.modal-overlay {
+  animation: modal-overlay-in 0.18s ease-out;
+}
+.modal-card {
+  animation: modal-card-in 0.22s ease-out backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .announcement,
+  .top-attendance-banner,
+  .auth-card,
+  .modal-overlay,
+  .modal-card {
+    animation: none;
+  }
 }
 .panel-heading {
   display: flex;
@@ -1032,7 +1127,8 @@
   background: #c3cbd4;
 }
 .team-list {
-  padding: 0 21px;
+  /* The bottom padding is the spacing the "View team settings" button used to provide. */
+  padding: 0 21px 14px;
 }
 .avatar-photo {
   object-fit: cover;
@@ -1079,21 +1175,6 @@
 }
 .online-text {
   color: var(--green);
-}
-.view-all {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  width: calc(100% - 42px);
-  margin: 4px 21px 18px;
-  padding-top: 13px;
-  border: 0;
-  border-top: 1px solid var(--line);
-  color: var(--blue);
-  background: none;
-  font-size: 10px;
-  font-weight: 650;
 }
 .focus-panel {
   margin-top: 19px;
@@ -1387,7 +1468,6 @@
 .sidebar-collapsed .nav-label,
 .sidebar-collapsed .nav-item span,
 .sidebar-collapsed .nav-item b,
-.sidebar-collapsed .help-box,
 .sidebar-collapsed .user-card-info,
 .sidebar-collapsed .user-card > .icon {
   display: none;
@@ -1491,7 +1571,6 @@
   .nav-label,
   .nav-item span,
   .nav-item b,
-  .help-box,
   .user-card-info,
   .user-card > .icon {
     display: none;
@@ -1533,5 +1612,204 @@
   }
   .focus-item strong {
     font-size: 10px;
+  }
+}
+
+/* The thing a clicked notification pointed at: it pulses for a few seconds so it is easy to
+   spot after the page scrolls to it (see utils/focusTarget.js). */
+[data-focus-id].focus-highlight {
+  border-radius: 10px;
+  outline: 2px solid var(--blue);
+  outline-offset: 4px;
+  animation: focus-pulse 1.4s ease-out 3;
+}
+@keyframes focus-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 103, 244, 0.5);
+    background-color: rgba(56, 103, 244, 0.16);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(56, 103, 244, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(56, 103, 244, 0);
+    background-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-focus-id].focus-highlight {
+    animation: none;
+    background-color: rgba(56, 103, 244, 0.12);
+  }
+}
+
+/* Clickable notification entries: on hover the entry slides over a little and an arrow fades
+   in at its right edge, to show it can be opened. */
+.notifications .notification-item {
+  position: relative;
+  padding-right: 16px;
+  transition: transform 0.18s ease;
+}
+.notifications .notification-item::after {
+  content: '›';
+  position: absolute;
+  top: 0;
+  right: 2px;
+  color: var(--blue);
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+.notifications .notification-item:hover,
+.notifications .notification-item:focus-visible {
+  outline: 0;
+  transform: translateX(4px);
+}
+.notifications .notification-item:hover::after,
+.notifications .notification-item:focus-visible::after {
+  opacity: 1;
+  transform: translateX(0);
+}
+.notifications .notification-item:active {
+  transform: translateX(2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .notifications .notification-item,
+  .notifications .notification-item::after {
+    transition: none;
+  }
+  .notifications .notification-item:hover,
+  .notifications .notification-item:focus-visible,
+  .notifications .notification-item:active {
+    transform: none;
+  }
+}
+
+/* ---- Notification entries: the hover is on the whole entry (a rounded container that fills
+   in and lifts), not on its text. Overrides the slide-the-text version above. ---- */
+.notifications .notification-item {
+  margin: 4px -8px 0;
+  padding: 10px 24px 10px 8px;
+  border-bottom: 0;
+  border-radius: 8px;
+  /* The divider between entries, drawn inside the box so the hover fill can cover it. */
+  box-shadow: inset 0 -1px 0 var(--line);
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+.notifications .notification-item:last-child {
+  padding-bottom: 10px;
+  box-shadow: none;
+}
+.notifications .notification-item.is-unread,
+.notifications .notification-item.is-important {
+  padding-left: 5px;
+}
+.notifications .notification-item:hover,
+.notifications .notification-item:focus-visible {
+  background-color: var(--canvas);
+  box-shadow: inset 0 0 0 1px var(--line), 0 6px 14px rgba(8, 12, 20, 0.14);
+  transform: translateY(-1px);
+}
+.notifications .notification-item:hover b,
+.notifications .notification-item:focus-visible b {
+  color: var(--ink);
+}
+.notifications .notification-item:active {
+  transform: translateY(0);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.notifications .notification-item::after {
+  top: 10px;
+  right: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .notifications .notification-item:hover,
+  .notifications .notification-item:focus-visible,
+  .notifications .notification-item:active {
+    transform: none;
+  }
+}
+
+/* The work overview sits right under its tab strip: a slimmer strip (48px, matching the chrome
+   heights above) and only a little padding above the dashboard's own toolbar. */
+.dashboard-overview-wrap .content.client-dashboard {
+  padding-top: 6px;
+}
+
+/* The Workspace / Work Overview / Attendance Log strip (and the Management tabs) stay fixed just
+   under the top bar while the page scrolls beneath them. The solid background hides what scrolls
+   past; it keeps its place in the layout, so nothing else moves. */
+.dashboard-view-switch-wrap {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 10;
+  background: var(--canvas);
+}
+/* Admins also have the panel-switch bar above the top bar. */
+.portal.has-panel-switch .dashboard-view-switch-wrap {
+  top: calc(var(--topbar-height) + var(--panel-switch-height));
+}
+
+/* ---- Unread notifications: a small square in the top-left corner of the entry (blue; amber for an
+   important @ALL note) instead of a coloured left border. Overrides the border versions above. ---- */
+.notifications .notification-item.is-unread,
+.notifications .notification-item.is-important {
+  padding-left: 8px;
+  border-left: 0;
+}
+.notifications p.is-unread,
+.notifications p.is-important {
+  padding-left: 0;
+  border-left: 0;
+}
+.notifications .notification-item.is-unread::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--blue);
+}
+.notifications .notification-item.is-unread.is-important::before {
+  background: #d97706;
+}
+
+/* ---- The marker that shows where a clicked notification points (utils/focusTarget.js). A fixed,
+   click-through outline above everything else, so nothing around the target can clip it. ---- */
+.focus-indicator {
+  position: fixed;
+  z-index: 70;
+  box-sizing: border-box;
+  border: 2px solid #3867f4;
+  border-radius: 12px;
+  background: rgba(56, 103, 244, 0.1);
+  pointer-events: none;
+  animation: focus-indicator-pulse 1.4s ease-out 3;
+}
+@keyframes focus-indicator-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 103, 244, 0.6);
+    background-color: rgba(56, 103, 244, 0.22);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(56, 103, 244, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(56, 103, 244, 0);
+    background-color: rgba(56, 103, 244, 0.08);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-indicator {
+    animation: none;
   }
 }

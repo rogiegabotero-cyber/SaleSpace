@@ -1,0 +1,52 @@
+/* The Eastern-time clock at the right of the Workspace / Work Overview / Attendance Log strip. */
+.eastern-clock {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--canvas);
+  white-space: nowrap;
+}
+.eastern-clock .icon {
+  color: var(--blue);
+}
+.eastern-clock-time {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.eastern-clock-zone {
+  padding: 2px 6px;
+  border-radius: 5px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.eastern-clock-date {
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 650;
+}
+@media (max-width: 900px) {
+  .eastern-clock-date {
+    display: none;
+  }
+}
+@media (max-width: 560px) {
+  .eastern-clock {
+    padding: 0 10px;
+  }
+  .eastern-clock .icon {
+    display: none;
+  }
+}

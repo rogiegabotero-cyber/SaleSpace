@@ -1,0 +1,178 @@
+/* "Someone closed an appointment" celebration (AppointmentCelebration.jsx): a dimmed screen,
+   a centred card, and a canvas of confetti over both. Sits above every other layer —
+   the bottom nav, sidebars and bottom sheets. */
+.celebration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(10, 14, 20, 0.6);
+  animation: celebration-fade 0.25s ease-out;
+}
+.celebration-confetti {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.celebration-card {
+  position: relative;
+  box-sizing: border-box;
+  width: min(100%, 420px);
+  max-height: calc(100vh - 40px);
+  padding: 30px 26px 24px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: center;
+  box-shadow: 0 30px 80px rgba(8, 12, 20, 0.5);
+  animation: celebration-pop 0.5s cubic-bezier(0.2, 1.2, 0.35, 1) backwards;
+}
+.celebration-photo {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 16px;
+}
+.celebration-photo-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 3px var(--surface),
+    0 0 0 6px var(--blue);
+}
+.celebration-photo-initials {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 700;
+}
+.celebration-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -2px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  color: #fff;
+  background: #ffb648;
+  animation: celebration-badge 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) 0.35s backwards;
+}
+.celebration-kicker {
+  margin: 0 0 6px;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.celebration-card h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 21px;
+  line-height: 1.25;
+  letter-spacing: -0.3px;
+  overflow-wrap: anywhere;
+}
+.celebration-practice {
+  margin: 10px 0 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.celebration-details {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--canvas);
+  text-align: left;
+}
+.celebration-details div {
+  display: grid;
+  gap: 2px;
+}
+.celebration-details dt {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.celebration-details dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.celebration-more {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.celebration-button {
+  width: 100%;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  background: var(--blue);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+.celebration-button:hover {
+  filter: brightness(1.08);
+}
+.celebration-button:focus-visible {
+  outline: 3px solid var(--blue-soft);
+  outline-offset: 2px;
+}
+@keyframes celebration-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes celebration-pop {
+  from { opacity: 0; transform: translateY(24px) scale(0.86); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes celebration-badge {
+  from { opacity: 0; transform: scale(0) rotate(-40deg); }
+  to { opacity: 1; transform: none; }
+}
+@media (max-width: 560px) {
+  .celebration-overlay {
+    padding: 14px;
+  }
+  .celebration-card {
+    padding: 26px 20px calc(20px + env(safe-area-inset-bottom));
+  }
+  .celebration-card h3 {
+    font-size: 19px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .celebration-overlay,
+  .celebration-card,
+  .celebration-badge {
+    animation: none;
+  }
+}

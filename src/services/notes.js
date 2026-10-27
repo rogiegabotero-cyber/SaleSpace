@@ -18,13 +18,19 @@ function commentDocument(noteId, commentId) {
 export function subscribeToNotes(onChange, onError) {
   return onSnapshot(
     query(notesCollection, orderBy('createdAt', 'desc'), limit(50)),
-    (snapshot) => onChange(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))),
+    // The metadata (second argument) says whether this is only the browser's cache — the
+    // mention alert waits for the server's answer before judging what is new.
+    (snapshot) => onChange(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })), snapshot.metadata),
     onError,
   )
 }
 
-export async function createNote({ authorUid, authorName, authorInitials, authorColor, authorPhoto, text }) {
+// `mentions` is [{ name, email }] for the people @-mentioned; `mentionAll` is true for @ALL
+// (an important note for the whole team). See utils/mentions.js.
+export async function createNote({ authorUid, authorName, authorInitials, authorColor, authorPhoto, text, mentions = [], mentionAll = false }) {
   await addDoc(notesCollection, {
+    mentions,
+    mentionAll,
     authorUid,
     authorName,
     authorInitials,

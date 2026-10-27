@@ -14,16 +14,23 @@ import { auth, firebaseConfig, functions } from './firebase'
 import { hyacinthAttendanceAPI } from './api/hyacinthAttendance'
 import { employeeDocument, subscribeToEmployees } from './services/employees'
 import { syncEmployees } from './services/employees'
-import { createPortalUser, subscribeToPortalUser, subscribeToPortalUsers } from './services/users'
+import { createPortalUser, deletePortalUser, subscribeToPortalUser, subscribeToPortalUsers, updatePortalUserRole } from './services/users'
 import { createInvite, subscribeToInvites } from './services/invites'
 import { getMustChangePassword, markMustChangePassword } from './services/accountFlags'
 import { subscribeToPreferences, updatePreferences } from './services/preferences'
 import { deleteCallsSheet, fetchHandlerCounts, fetchSheetMetadata, saveCallsSheet, subscribeToCallsSheets } from './services/callsSheet'
 import { useTeamPresence } from './hooks/useTeamPresence'
+import { useHashRoute } from './hooks/useHashRoute'
 import { PortalShell } from './PortalShell'
-import { ROLES, roleLabel } from './roles'
+import { ROLES, isClientOnlyRole, roleLabel } from './roles'
+import { useDocumentTitle } from './hooks/useDocumentTitle'
+import AnnouncementAlert from './AnnouncementAlert'
+import QuotaAlert from './QuotaAlert'
+import MentionAlert from './MentionAlert'
+import AppointmentCelebration from './AppointmentCelebration'
 import ChangePasswordForm from './ChangePasswordForm'
 import ConfirmModal from './ConfirmModal'
+import CustomSelect from './CustomSelect'
 import LoadingOverlay from './LoadingOverlay'
 import PageLoading from './PageLoading'
 import PanelSwitchBar from './PanelSwitchBar'
@@ -36,6 +43,9 @@ const credentialAuth = getAuth(secondaryApp)
 const FIREBASE_AUTH_USERS_URL = `https://console.firebase.google.com/u/0/project/${firebaseConfig.projectId}/authentication/users`
 
 const ADMIN_NAV_ITEMS = [['Dashboard', 'grid'], ['Attendance Log', 'clock'], ['Employees', 'people'], ['Portal Users', 'people'], ['Calls Sheet', 'table']]
+const ADMIN_PAGES = ADMIN_NAV_ITEMS.map(([label]) => label)
+// A regular employee can be made a manager; this many managers can exist at once.
+const MAX_MANAGERS = 3
 
 function makePassword() {
   return `${crypto.randomUUID().replaceAll('-', '').slice(0, 8)}!${Math.floor(1000 + Math.random() * 9000)}`
@@ -54,7 +64,7 @@ function downloadCredentialsPdf(filenameBase, fields, password) {
 }
 
 function ownPanelForRole(role) {
-  return role === 'manager' || role === 'visitor' ? '/client' : '/'
+  return isClientOnlyRole(role) ? '/client' : '/'
 }
 
 function AddPortalUserForm({ currentRole, currentEmail, onCreated, onError }) {
@@ -142,6 +152,7 @@ function CallsSheetSettings({ currentEmail }) {
   const [handlerOptions, setHandlerOptions] = useState([])
   const [selectedHandlers, setSelectedHandlers] = useState([])
   const [availableLabels, setAvailableLabels] = useState([])
+  const [closedAppointmentTabs, setClosedAppointmentTabs] = useState([])
   const [handlersLoading, setHandlersLoading] = useState(false)
   const [handlersError, setHandlersError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -160,6 +171,7 @@ function CallsSheetSettings({ currentEmail }) {
     setHandlerOptions([])
     setSelectedHandlers([])
     setAvailableLabels([])
+    setClosedAppointmentTabs([])
     setLastFetchedUrl('')
     setResult(null)
     setError('')
@@ -177,6 +189,7 @@ function CallsSheetSettings({ currentEmail }) {
     setHandlerHeaderInput(sheet.handlerHeader || 'Handler')
     setSelectedHandlers(sheet.validHandlers || [])
     setAvailableLabels(sheet.availableLabels || [])
+    setClosedAppointmentTabs(sheet.closedAppointmentTabs || [])
     setHandlerOptions([...new Set([...(sheet.validHandlers || []), ...(sheet.availableLabels || [])])])
     setLastFetchedUrl(sheet.url)
     setResult(null)
@@ -236,7 +249,7 @@ function CallsSheetSettings({ currentEmail }) {
     setHandlersError('')
     setHandlersLoading(true)
     try {
-      const scanResult = await fetchHandlerCounts(trimmedUrl, sheetNames, { handlerHeader: handlerHeaderInput.trim() || 'Handler' })
+      const scanResult = await fetchHandlerCounts(trimmedUrl, sheetNames, { handlerHeader: handlerHeaderInput.trim() || 'Handler', availableLabels, validHandlers: selectedHandlers, excludeTabs: closedAppointmentTabs })
       setHandlerOptions((current) => [...new Set([...current, ...scanResult.allHandlerNames])].sort())
     } catch (err) {
       setHandlersError(err.message)
@@ -253,9 +266,15 @@ function CallsSheetSettings({ currentEmail }) {
     setAvailableLabels((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]))
   }
 
+  function toggleClosedAppointmentTab(name) {
+    setClosedAppointmentTabs((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]))
+  }
+
   async function submit(event) {
     event.preventDefault()
     const trimmedUrl = urlInput.trim()
+    // A tab removed from the list above can't stay flagged as a closed-appointment tab.
+    const closedTabs = closedAppointmentTabs.filter((name) => sheetNames.includes(name))
     const trimmedHandlerHeader = handlerHeaderInput.trim() || 'Handler'
     const tabGids = Object.fromEntries(
       sheetNames
@@ -266,8 +285,8 @@ function CallsSheetSettings({ currentEmail }) {
     setResult(null)
     setSaving(true)
     try {
-      const testResult = await fetchHandlerCounts(trimmedUrl, sheetNames, { handlerHeader: trimmedHandlerHeader, validHandlers: selectedHandlers, availableLabels })
-      const savedId = await saveCallsSheet({ id: editingId, url: trimmedUrl, sheetNames, tabGids, title: titleInput.trim() || 'Untitled sheet', updatedBy: currentEmail, handlerHeader: trimmedHandlerHeader, validHandlers: selectedHandlers, availableLabels })
+      const testResult = await fetchHandlerCounts(trimmedUrl, sheetNames, { handlerHeader: trimmedHandlerHeader, validHandlers: selectedHandlers, availableLabels, excludeTabs: closedTabs })
+      const savedId = await saveCallsSheet({ id: editingId, url: trimmedUrl, sheetNames, tabGids, title: titleInput.trim() || 'Untitled sheet', updatedBy: currentEmail, handlerHeader: trimmedHandlerHeader, validHandlers: selectedHandlers, availableLabels, closedAppointmentTabs: closedTabs })
       setEditingId(savedId)
       setHandlerOptions((current) => [...new Set([...current, ...testResult.allHandlerNames])].sort())
       setResult(testResult)
@@ -287,6 +306,10 @@ function CallsSheetSettings({ currentEmail }) {
         <p className="tab-gid-hint">Pulled in automatically when the sheet link is fetched — lets "Available to call" open the exact tab in Google Sheets. Only fill these in yourself if a tab is missing one below.</p>
         {tabGidWarning && <div className="form-error admin-error">{tabGidWarning}</div>}
         <div className="tab-gid-grid">{sheetNames.map((name) => <label key={name} className="tab-gid-row"><span>{name}</span><input value={tabGidsInput[name] || ''} onChange={(event) => setTabGid(name, event.target.value)} placeholder="gid (optional)" inputMode="numeric" /></label>)}</div>
+      </div>}
+      {sheetNames.length > 0 && <div className="tab-gid-section">
+        <p className="tab-gid-hint">Which tabs list closed appointments (Name of Practice, Location, POC, Handler, Date Closed, Appointment)? Checked tabs show in the Closed appointments table on the client dashboard and are not counted as calls.</p>
+        <div className="tab-gid-grid">{sheetNames.map((name) => <label key={name} className="tab-gid-row"><input type="checkbox" checked={closedAppointmentTabs.includes(name)} onChange={() => toggleClosedAppointmentTab(name)} /><span>{name}</span></label>)}</div>
       </div>}
       <label>Handler column header (which header names the column each tab's employee names live in — usually "Handler", but not always)<div className="calls-sheet-link-row"><input value={handlerHeaderInput} onChange={(event) => setHandlerHeaderInput(event.target.value)} placeholder="Handler" /><button type="button" className="admin-link" disabled={!urlInput.trim() || !sheetNames.length || handlersLoading} onClick={discoverHandlerNames}>{handlersLoading ? 'Scanning...' : 'Find names'}</button></div></label>
       {handlersError && <div className="form-error admin-error">{handlersError}</div>}
@@ -318,7 +341,8 @@ export default function AdminPage() {
   const [authChecked, setAuthChecked] = useState(false)
   const [mustChangePassword, setMustChangePassword] = useState(null)
   const [profileDoc, setProfileDoc] = useState(undefined)
-  const [activePage, setActivePage] = useState('Dashboard')
+  const { page: activePage, setPage: setActivePage } = useHashRoute({ pages: ADMIN_PAGES })
+  useDocumentTitle(mustChangePassword ? 'Change password' : `Admin · ${activePage}`)
   const [darkMode, setDarkMode] = useState(false)
   const [savingDarkMode, setSavingDarkMode] = useState(false)
   const { people: teamPeople } = useTeamPresence(
@@ -334,6 +358,13 @@ export default function AdminPage() {
   const [accessTarget, setAccessTarget] = useState(null)
   const [togglingAccess, setTogglingAccess] = useState(false)
   const [toggleAccessError, setToggleAccessError] = useState('')
+  const [roleChange, setRoleChange] = useState(null)
+  // { employee, makeManager } while the make / remove manager confirmation is open.
+  const [managerAction, setManagerAction] = useState(null)
+  const [savingManager, setSavingManager] = useState(false)
+  const [managerError, setManagerError] = useState('')
+  const [savingRole, setSavingRole] = useState(false)
+  const [roleChangeError, setRoleChangeError] = useState('')
 
   useEffect(() => onAuthStateChanged(auth, (nextUser) => { setUser(nextUser); setAuthChecked(true) }), [])
 
@@ -365,6 +396,53 @@ export default function AdminPage() {
 
   const role = profileDoc?.role
   const hasAdminAccess = role === 'admin' || role === 'super_admin'
+
+  // Who can have their role changed here, and to what. Mirrors the rules for creating users:
+  // a super admin may set any role, an admin only moves managers and visitors between those
+  // two. Nobody changes their own role (it could lock them out), and the last super admin
+  // can't be demoted.
+  const superAdminCount = portalUsers.filter((item) => item.role === 'super_admin').length
+  function rolesChangeableTo(target) {
+    if (!user || target.id === user.uid) return []
+    if (role === 'super_admin') return target.role === 'super_admin' && superAdminCount <= 1 ? [] : ROLES
+    if (role === 'admin' && ['manager', 'visitor'].includes(target.role)) return ROLES.filter((item) => ['manager', 'visitor'].includes(item.value))
+    return []
+  }
+
+  // Managers are employees promoted to the Manager role: a portal account that shares the employee's
+  // sign-in. They keep their employee access and gain the Management page. At most MAX_MANAGERS.
+  const managerUsers = portalUsers.filter((item) => item.role === 'manager')
+  const managerAccountOf = (employee) => (employee.authUid ? managerUsers.find((item) => item.id === employee.authUid) : undefined)
+  const managerBlockReason = (employee) => (managerAccountOf(employee) ? '' : !employee.authUid ? 'Generate credentials first, so they have an account to promote.' : managerUsers.length >= MAX_MANAGERS ? `There can be at most ${MAX_MANAGERS} managers. Remove one first.` : '')
+
+  async function applyManagerChange() {
+    const { employee, makeManager } = managerAction
+    setSavingManager(true)
+    setManagerError('')
+    try {
+      if (makeManager) await createPortalUser({ uid: employee.authUid, name: employee.name, email: employee.loginEmail || employee.email || '', role: 'manager', createdBy: user.email })
+      else await deletePortalUser(employee.authUid)
+      setManagerAction(null)
+    } catch (err) {
+      setManagerError(err.code === 'permission-denied' ? "You don't have permission to do that. The latest Firestore rules may need deploying." : err.message)
+    } finally {
+      setSavingManager(false)
+    }
+  }
+
+  async function confirmRoleChange() {
+    if (!roleChange) return
+    setSavingRole(true)
+    setRoleChangeError('')
+    try {
+      await updatePortalUserRole(roleChange.user.id, roleChange.role)
+      setRoleChange(null)
+    } catch (err) {
+      setRoleChangeError(err.code === 'permission-denied' ? "You don't have permission to change that role." : err.message)
+    } finally {
+      setSavingRole(false)
+    }
+  }
   const displayName = profileDoc?.name || user?.email?.split('@')[0] || ''
   const panelLinks = hasAdminAccess ? [
     { label: 'Admin panel', href: '/admin', active: true },
@@ -467,10 +545,17 @@ export default function AdminPage() {
   return <>
     {savingDarkMode && <LoadingOverlay />}
     <PanelSwitchBar links={panelLinks} darkMode={darkMode} />
-    <PortalShell rootLabel="Admin" activePage={activePage} navItems={ADMIN_NAV_ITEMS} hasPanelSwitch={panelLinks.length > 0} onNavigate={setActivePage} userName={displayName} userRole={roleLabel(role)} darkMode={darkMode} onToggleDarkMode={toggleDarkMode} onSignOut={() => signOut(auth)}>
-    {activePage === 'Dashboard' ? <ClientDashboard people={teamPeople} /> : activePage === 'Attendance Log' ? <AttendanceLogPage people={teamPeople} /> : <div className="content">
+    <PortalShell userId={user.uid} userEmail={user.email} rootLabel="Admin" activePage={activePage} navItems={ADMIN_NAV_ITEMS} hasPanelSwitch={panelLinks.length > 0} onNavigate={setActivePage} userName={displayName} userRole={roleLabel(role)} darkMode={darkMode} onToggleDarkMode={toggleDarkMode} onSignOut={() => signOut(auth)}>
+    <AppointmentCelebration userId={user.uid} people={teamPeople} />
+    <AnnouncementAlert userId={user.uid} />
+    <QuotaAlert userId={user.uid} />
+    <MentionAlert userId={user.uid} userEmail={user.email} />
+    {activePage === 'Dashboard' ? <ClientDashboard people={teamPeople} showOnlinePanel /> : activePage === 'Attendance Log' ? <AttendanceLogPage people={teamPeople} /> : <div className="content">
       {error && <div className="form-error admin-error">{error}</div>}
-      {activePage === 'Employees' ? <><div className="page-heading"><div><p className="eyebrow">Hyacinth team</p><h1>Employee access</h1><p className="heading-copy">Manage portal credentials for your Hyacinth team.</p></div></div><section className="admin-stats"><div><strong>{employees.length}</strong><span>Saved employees</span></div><div><strong>{registeredCount}</strong><span>Registered accounts</span></div><div><strong>{employees.length - registeredCount}</strong><span>Awaiting access</span></div></section><section className="employee-table employees-list"><div className="table-head"><span>Employee</span><span>Department ID</span><span>Account status</span><span>Action</span></div>{employees.length ? employees.map((employee) => <div className="employee-row" key={employee.id}><div><strong>{employee.name}</strong><small>{employee.email || 'No email in Hyacinth'} · ID {employee.hyacinthUserId || employee.id}</small></div><span>{employee.departmentId || 'Not set'}</span><span className={employee.accountDisabled ? 'disabled-status' : employee.authUid || employee.registered ? 'registered' : 'pending'}>{employee.accountDisabled ? 'Disabled' : employee.authUid || employee.registered ? 'Registered' : 'Not registered'}</span><div className="row-actions"><button className="row-button" type="button" disabled={busyId === employee.id} onClick={() => generateCredentials(employee)}>{busyId === employee.id ? 'Working...' : employee.authUid || employee.registered ? 'Reset password' : 'Generate credentials'}</button>{(employee.authUid || employee.registered) && <button className={`row-button ${employee.accountDisabled ? '' : 'row-button-danger'}`} type="button" onClick={() => setAccessTarget(employee)}>{employee.accountDisabled ? 'Enable access' : 'Disable access'}</button>}</div></div>) : <p className="empty-table">No employees have been synced yet. Open the dashboard once to fetch the Hyacinth department.</p>}</section>{credentials && <ConfirmModal title={`Credentials created for ${credentials.employee.name}`} message={<>This password is shown once and is not stored anywhere — download the PDF now before closing this window.<code className="credential-password">{credentials.password}</code></>} confirmLabel="Download PDF" cancelLabel="Close" onConfirm={() => downloadCredentialsPdf(credentials.employee.name, [['Employee', credentials.employee.name], ['Employee ID', credentials.employee.hyacinthUserId || credentials.employee.id], ['Email', credentials.email]], credentials.password)} onCancel={() => setCredentials(null)} />}{accessTarget && <ConfirmModal title={accessTarget.accountDisabled ? 'Enable access' : 'Disable access'} message={accessTarget.accountDisabled ? `Restore portal access for ${accessTarget.name}? They'll be able to sign in with their existing credentials again.` : `Disable portal access for ${accessTarget.name}? They will no longer be able to sign in or use their credentials, but their name and activity will still appear throughout the app.`} confirmLabel={accessTarget.accountDisabled ? 'Enable access' : 'Disable access'} busy={togglingAccess} error={toggleAccessError} onConfirm={toggleAccountAccess} onCancel={() => { setAccessTarget(null); setToggleAccessError('') }} />}</> : activePage === 'Portal Users' ? <><div className="page-heading"><div><p className="eyebrow">Client portal</p><h1>Portal users</h1><p className="heading-copy">Create logins for admins, managers, and visitors on this client portal.</p></div></div><AddPortalUserForm currentRole={role} currentEmail={user.email} onCreated={setPortalCredentials} onError={setError} /><div className="employee-table"><div className="table-head"><span>Name</span><span>Email</span><span>Role</span><span>Added by</span></div>{portalUsers.length ? portalUsers.map((portalUser) => <div className="employee-row" key={portalUser.id}><div><strong>{portalUser.name}</strong></div><span>{portalUser.email}</span><span>{roleLabel(portalUser.role)}</span><span>{portalUser.createdBy || '—'}</span></div>) : <p className="empty-table">No portal users created yet.</p>}</div>{portalCredentials && <ConfirmModal title={`Credentials created for ${portalCredentials.name}`} message={<>This password is shown once and is not stored anywhere — download the PDF now before closing this window.<code className="credential-password">{portalCredentials.password}</code></>} confirmLabel="Download PDF" cancelLabel="Close" onConfirm={() => downloadCredentialsPdf(portalCredentials.name, [['Name', portalCredentials.name], ['Role', roleLabel(portalCredentials.role)], ['Email', portalCredentials.email]], portalCredentials.password)} onCancel={() => setPortalCredentials(null)} />}<div className="page-heading"><div><p className="eyebrow">Client portal</p><h1>Invite by email</h1><p className="heading-copy">Send a Firebase sign-in link instead — they get portal access the moment they click it, no password to hand off.</p></div></div><InviteByEmailForm currentRole={role} currentEmail={user.email} invites={invites} onError={setError} /></> : <CallsSheetSettings currentEmail={user.email} />}
+      {activePage === 'Employees' ? <><div className="page-heading"><div><p className="eyebrow">Hyacinth team</p><h1>Employee access</h1><p className="heading-copy">Manage portal credentials for your Hyacinth team.</p></div></div><section className="admin-stats"><div><strong>{employees.length}</strong><span>Saved employees</span></div><div><strong>{registeredCount}</strong><span>Registered accounts</span></div><div><strong>{employees.length - registeredCount}</strong><span>Awaiting access</span></div></section><section className="employee-table employees-list"><div className="table-head"><span>Employee</span><span>Department ID</span><span>Account status</span><span>Role</span><span>Action</span></div>{employees.length ? employees.map((employee) => <div className="employee-row" key={employee.id}><div><strong>{employee.name}</strong><small>{employee.email || 'No email in Hyacinth'} · ID {employee.hyacinthUserId || employee.id}</small></div><span>{employee.departmentId || 'Not set'}</span><span className={employee.accountDisabled ? 'disabled-status' : employee.authUid || employee.registered ? 'registered' : 'pending'}>{employee.accountDisabled ? 'Disabled' : employee.authUid || employee.registered ? 'Registered' : 'Not registered'}</span><span className="employee-managers">{managerAccountOf(employee) ? <i className="manager-chip">Manager</i> : <em>Employee</em>}<button className="row-button employee-managers-edit" type="button" disabled={Boolean(managerBlockReason(employee))} title={managerBlockReason(employee) || undefined} onClick={() => { setManagerError(''); setManagerAction({ employee, makeManager: !managerAccountOf(employee) }) }}>{managerAccountOf(employee) ? 'Remove manager' : 'Make manager'}</button></span><div className="row-actions"><button className="row-button" type="button" disabled={busyId === employee.id} onClick={() => generateCredentials(employee)}>{busyId === employee.id ? 'Working...' : employee.authUid || employee.registered ? 'Reset password' : 'Generate credentials'}</button>{(employee.authUid || employee.registered) && <button className={`row-button ${employee.accountDisabled ? '' : 'row-button-danger'}`} type="button" onClick={() => setAccessTarget(employee)}>{employee.accountDisabled ? 'Enable access' : 'Disable access'}</button>}</div></div>) : <p className="empty-table">No employees have been synced yet. Open the dashboard once to fetch the Hyacinth department.</p>}</section>{managerAction && <ConfirmModal title={managerAction.makeManager ? 'Make manager' : 'Remove manager'} message={managerAction.makeManager ? `Make ${managerAction.employee.name} a manager? They keep their employee access and also get the Management page — announcements, notes, the daily call quota and the call team. ${managerUsers.length} of ${MAX_MANAGERS} manager spots are in use.` : `Remove ${managerAction.employee.name} as a manager? They go back to a regular employee and lose the Management page.`} confirmLabel={managerAction.makeManager ? 'Make manager' : 'Remove manager'} busy={savingManager} error={managerError} onConfirm={applyManagerChange} onCancel={() => setManagerAction(null)} />}{credentials && <ConfirmModal title={`Credentials created for ${credentials.employee.name}`} message={<>This password is shown once and is not stored anywhere — download the PDF now before closing this window.<code className="credential-password">{credentials.password}</code></>} confirmLabel="Download PDF" cancelLabel="Close" onConfirm={() => downloadCredentialsPdf(credentials.employee.name, [['Employee', credentials.employee.name], ['Employee ID', credentials.employee.hyacinthUserId || credentials.employee.id], ['Email', credentials.email]], credentials.password)} onCancel={() => setCredentials(null)} />}{accessTarget && <ConfirmModal title={accessTarget.accountDisabled ? 'Enable access' : 'Disable access'} message={accessTarget.accountDisabled ? `Restore portal access for ${accessTarget.name}? They'll be able to sign in with their existing credentials again.` : `Disable portal access for ${accessTarget.name}? They will no longer be able to sign in or use their credentials, but their name and activity will still appear throughout the app.`} confirmLabel={accessTarget.accountDisabled ? 'Enable access' : 'Disable access'} busy={togglingAccess} error={toggleAccessError} onConfirm={toggleAccountAccess} onCancel={() => { setAccessTarget(null); setToggleAccessError('') }} />}</> : activePage === 'Portal Users' ? <><div className="page-heading"><div><p className="eyebrow">Client portal</p><h1>Portal users</h1><p className="heading-copy">Create logins for admins, managers, and visitors on this client portal.</p></div></div><AddPortalUserForm currentRole={role} currentEmail={user.email} onCreated={setPortalCredentials} onError={setError} /><div className="employee-table portal-users-table"><div className="table-head"><span>Name</span><span>Email</span><span>Role</span><span>Added by</span></div>{portalUsers.length ? portalUsers.map((portalUser) => {
+        const options = rolesChangeableTo(portalUser)
+        return <div className="employee-row" key={portalUser.id}><div><strong>{portalUser.name}</strong></div><span>{portalUser.email}</span><span className="portal-user-role">{options.length ? <CustomSelect className="role-select" value={portalUser.role} onChange={(next) => next !== portalUser.role && setRoleChange({ user: portalUser, role: next })} options={options.map((item) => ({ value: item.value, label: item.label }))} ariaLabel={`Change role for ${portalUser.name || portalUser.email}`} /> : roleLabel(portalUser.role)}</span><span>{portalUser.createdBy || '—'}</span></div>
+      }) : <p className="empty-table">No portal users created yet.</p>}</div>{roleChange && <ConfirmModal title="Change role" message={`Change ${roleChange.user.name || roleChange.user.email}'s role from ${roleLabel(roleChange.user.role)} to ${roleLabel(roleChange.role)}? ${roleChange.role === 'visitor' ? 'They will lose access to the employee workspace and the admin panel.' : roleChange.user.role === 'visitor' ? 'They will gain access to the employee workspace.' : roleChange.role === 'admin' || roleChange.role === 'super_admin' ? 'They will gain access to the admin panel.' : 'It takes effect the next time they open the portal.'}`} confirmLabel="Change role" busy={savingRole} error={roleChangeError} onConfirm={confirmRoleChange} onCancel={() => { setRoleChange(null); setRoleChangeError('') }} />}{portalCredentials && <ConfirmModal title={`Credentials created for ${portalCredentials.name}`} message={<>This password is shown once and is not stored anywhere — download the PDF now before closing this window.<code className="credential-password">{portalCredentials.password}</code></>} confirmLabel="Download PDF" cancelLabel="Close" onConfirm={() => downloadCredentialsPdf(portalCredentials.name, [['Name', portalCredentials.name], ['Role', roleLabel(portalCredentials.role)], ['Email', portalCredentials.email]], portalCredentials.password)} onCancel={() => setPortalCredentials(null)} />}<div className="page-heading"><div><p className="eyebrow">Client portal</p><h1>Invite by email</h1><p className="heading-copy">Send a Firebase sign-in link instead — they get portal access the moment they click it, no password to hand off.</p></div></div><InviteByEmailForm currentRole={role} currentEmail={user.email} invites={invites} onError={setError} /></> : <CallsSheetSettings currentEmail={user.email} />}
     </div>}
     </PortalShell>
   </>

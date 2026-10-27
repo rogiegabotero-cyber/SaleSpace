@@ -4,9 +4,11 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { acceptInvite, getInvite } from './services/invites'
 import { createPortalUser } from './services/users'
+import { useDocumentTitle } from './hooks/useDocumentTitle'
 import './admin.css'
 
 export default function VisitorLoginPage() {
+  useDocumentTitle('Visitor sign in')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 

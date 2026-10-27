@@ -3,7 +3,9 @@ import { hyacinthAttendanceAPI } from '../api/hyacinthAttendance'
 import { syncEmployees } from '../services/employees'
 
 const COLORS = ['coral', 'blue', 'purple', 'green']
-const REFRESH_MS = 60_000
+// Attendance isn't needed live: each refresh costs one request per employee, and a new
+// `people` list also makes the attendance breakdown and monthly counts refetch theirs.
+const REFRESH_MS = 60 * 60_000
 
 function initialsOf(name) {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -22,24 +24,28 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }
 
-async function isUserOnline(userId, signal) {
+// Online state plus today's attendance status (Early / On Time / Late, ...), which the API
+// stamps on the day's first "In" log — the same log the attendance breakdown reads.
+async function getTodayPresence(userId, signal) {
   const today = todayISO()
   const logs = await hyacinthAttendanceAPI.getAttendanceLogs(
     { userId, startDate: today, endDate: today },
     signal,
   )
-  if (!logs?.length) return false
-  const latest = [...logs].sort(
-    (a, b) => new Date(b.timestamp) - new Date(a.timestamp),
-  )[0]
-  return latest.type === 'In'
+  if (!logs?.length) return { online: false, attendanceStatus: null }
+  const byTime = [...logs].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+  const firstIn = byTime.find((log) => log.type === 'In' && log.status)
+  return {
+    online: byTime[byTime.length - 1].type === 'In',
+    attendanceStatus: firstIn?.status || null,
+  }
 }
 
-async function safeIsUserOnline(userId, signal) {
+async function safeGetTodayPresence(userId, signal) {
   try {
-    return await isUserOnline(userId, signal)
+    return await getTodayPresence(userId, signal)
   } catch {
-    return false
+    return { online: false, attendanceStatus: null }
   }
 }
 
@@ -69,7 +75,7 @@ export function useTeamPresence(departmentId) {
 
         const withPresence = await Promise.all(
           users.map(async (user) => {
-            const online = await safeIsUserOnline(user.userId, controller.signal)
+            const { online, attendanceStatus } = await safeGetTodayPresence(user.userId, controller.signal)
             return {
               id: user.userId,
               initials: initialsOf(user.name || user.email || '?'),
@@ -78,6 +84,7 @@ export function useTeamPresence(departmentId) {
               role: user.position || user.role,
               color: colorFor(user.userId),
               online,
+              attendanceStatus,
               profileImg: user.profileImg,
             }
           }),
