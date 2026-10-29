@@ -630,6 +630,16 @@ svg {
     grid-template-columns: 1fr 1fr;
     gap: 10px 18px;
   }
+  /* Too narrow to sit beside the identity: the quota bar drops to its own row. */
+  .attendance-modal-header {
+    flex-wrap: wrap;
+  }
+  .attendance-modal-header .quota-progress {
+    flex-basis: 100%;
+  }
+  .attendance-modal-person {
+    flex: 1 1 100%;
+  }
   .attendance-modal-header {
     padding-right: 52px;
     padding-left: 18px;

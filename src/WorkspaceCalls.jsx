@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo } from 'react'
 import { TeamOnlinePanel, useCallsSheet } from './ClientView'
 import { useCallerFilter } from './hooks/useCallerFilter'
+import CallsTrendPanel from './CallsTrendPanel'
 
 // The employee workspace reads the connected calls sheet once and shares it: the quota donut
 // needs today's calls, and the team panel needs the month's, for its tooltips and popups. It
@@ -19,6 +20,15 @@ export function WorkspaceCallsProvider({ children, people = [] }) {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useWorkspaceCalls() {
   return useContext(CallsContext)
+}
+
+// The calls trend graph for the signed-in employee alone, found among `people` by email.
+export function WorkspaceTrendPanel({ people, userEmail }) {
+  const calls = useWorkspaceCalls()
+  const email = (userEmail || '').trim().toLowerCase()
+  const me = useMemo(() => people.find((person) => (person.email || '').trim().toLowerCase() === email) || null, [people, email])
+  if (!calls?.url || !me) return null
+  return <CallsTrendPanel daily={calls.counts?.daily} people={people} loading={Boolean(calls.loading)} employee={me} />
 }
 
 export function WorkspaceTeamPanel({ people, className }) {

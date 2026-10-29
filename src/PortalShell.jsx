@@ -146,7 +146,7 @@ export function PortalShell({
 
   return <div className={`portal ${collapsed ? 'sidebar-collapsed' : ''} ${darkMode ? 'dark-mode' : ''} ${hasPanelSwitch ? 'has-panel-switch' : ''}`}>
     <aside className={`sidebar ${profile ? 'menu-open' : ''}`}>
-      <div className="brand">{collapsed ? <img className="brand-icon" src="/sales-icon.webp" alt="Salespace" /> : <img className="brand-logo" src={salesLogo} alt="Salespace" />}</div>
+      <div className="brand">{collapsed ? <img className="brand-icon" src="/public/sales_emblem.svg" alt="Salespace" /> : <img className="brand-logo" src={salesLogo} alt="Salespace" />}</div>
       <p className="nav-label">{rootLabel}</p>
       <nav>{navItems.map(([label, icon]) => <button type="button" className={`nav-item ${activePage === label ? 'active' : ''}`} key={label} onClick={() => onNavigate(label)}><Icon name={icon} /><span>{label}</span></button>)}</nav>
       {manageItems.length > 0 && <>

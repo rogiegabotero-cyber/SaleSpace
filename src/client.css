@@ -460,6 +460,45 @@
   font-size: 11px;
   font-weight: 650;
 }
+.employee-tip-today {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--canvas);
+}
+.employee-tip-today > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.employee-tip-today small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.employee-tip-today strong {
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.1;
+}
+.employee-tip-today strong span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.employee-tip-today em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 650;
+}
+.employee-tip-today-ring {
+  flex: none;
+}
 .employee-tip-attendance {
   display: grid;
   justify-items: center;
@@ -762,7 +801,7 @@
   top: 18px;
   right: 18px;
 }
-.stat-modal-section-label {
+.modal-card p.stat-modal-section-label {
   margin: 22px 0 12px;
   padding-top: 18px;
   border-top: 1px solid var(--line);
@@ -772,7 +811,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.stat-modal-section-label:first-of-type {
+.modal-card p.stat-modal-section-label:first-of-type {
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
@@ -793,6 +832,29 @@
   padding: 24px 56px 14px 24px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
+}
+.attendance-modal-person {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 0 16px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+/* The photo is no circle here: it fills the left of the box edge to edge, top to bottom. */
+.attendance-modal-person .avatar {
+  align-self: stretch;
+  width: 96px;
+  height: auto;
+  min-height: 84px;
+  margin: 0;
+  border-radius: 0;
+  font-size: 22px;
+}
+.attendance-modal-person .attendance-modal-identity {
+  padding: 12px 0;
 }
 .attendance-modal-identity {
   display: grid;
@@ -2493,4 +2555,57 @@
 }
 .attendance-log-details .attendance-log-override {
   color: var(--muted);
+}
+
+/* Today's calls against the daily quota, under the employee stats modal's header. */
+.quota-progress {
+  display: grid;
+  flex: 1 1 0;
+  min-width: 140px;
+  gap: 6px;
+  align-self: stretch;
+  align-content: center;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.quota-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.quota-progress-head strong {
+  color: var(--ink);
+  font-size: 15px;
+  letter-spacing: 0;
+}
+.quota-progress-head small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.quota-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--blue-soft);
+}
+.quota-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+  transition: width 0.6s ease;
+}
+.quota-progress.is-reached .quota-progress-fill {
+  background: #16a34a;
+}
+.quota-progress-note {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
 }

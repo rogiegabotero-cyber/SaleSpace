@@ -2,6 +2,9 @@
 .calls-trend {
   flex: 0 0 auto;
 }
+.dashboard-grid + .calls-trend {
+  margin-top: 19px;
+}
 .calls-trend-controls {
   flex-wrap: wrap;
   justify-content: flex-end;

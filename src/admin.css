@@ -97,6 +97,24 @@
   width: 100%;
   margin-top: 24px;
 }
+.auth-card .auth-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.auth-card .auth-submit:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.button-spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: loading-spin 0.7s linear infinite;
+}
 .form-error {
   margin-top: 15px;
   padding: 10px 12px;

@@ -14,6 +14,7 @@ import { fetchClosedAppointments, fetchHandlerCounts, googleSheetTabUrl, setCall
 import { createPortalUser } from './services/users'
 import { acceptInvite, getInvite } from './services/invites'
 import { subscribeToPreferences, updatePreferences } from './services/preferences'
+import { subscribeToCallQuota } from './services/quota'
 import { Avatar, Icon } from './PortalShell'
 import { initialsOf } from './utils/initials'
 import { matchEmployeeByName } from './utils/matchEmployee'
@@ -664,28 +665,42 @@ function TopAttendanceModal({ person, onClose }) {
   </div>
 }
 
-function EmployeeStatsModal({ person, people, monthlyCallTotals, monthTotal, monthLabel, perTab, onClose }) {
+function EmployeeStatsModal({ person, people, monthlyCallTotals, todayCallTotals, monthTotal, monthLabel, perTab, onClose }) {
   const agentName = useMemo(
     () => Object.keys(monthlyCallTotals).find((name) => matchEmployeeByName(name, people)?.id === person.id) || null,
     [monthlyCallTotals, people, person.id],
   )
   const agentCalls = agentName ? monthlyCallTotals[agentName] : 0
+  const [dailyQuota, setDailyQuota] = useState(null)
+  useEffect(() => subscribeToCallQuota(setDailyQuota, (err) => console.warn('[quota] unavailable:', err.message)), [])
+  const todayCalls = useMemo(
+    () => Object.entries(todayCallTotals || {}).reduce((sum, [name, count]) => (matchEmployeeByName(name, people)?.id === person.id ? sum + count : sum), 0),
+    [todayCallTotals, people, person.id],
+  )
+  const quotaReached = dailyQuota > 0 && todayCalls >= dailyQuota
 
   return <div className="modal-overlay" role="presentation" onClick={onClose}>
     <div className="modal-card stat-modal-card attendance-modal-card" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
       <div className="attendance-modal-header">
-        {person.profileImg ? <img className="avatar avatar-photo avatar-large" src={person.profileImg} alt="" /> : <Avatar initials={person.initials} color={person.color} large />}
-        <div className="attendance-modal-identity">
-          <strong>{person.name}</strong>
-          {person.email && <span className="attendance-modal-email">{person.email}</span>}
-          {person.role && <div className="attendance-modal-pills"><span className="attendance-modal-pill">{person.role}</span></div>}
+        <div className="attendance-modal-person">
+          {person.profileImg ? <img className="avatar avatar-photo avatar-large" src={person.profileImg} alt="" /> : <Avatar initials={person.initials} color={person.color} large />}
+          <div className="attendance-modal-identity">
+            <strong>{person.name}</strong>
+            {person.email && <span className="attendance-modal-email">{person.email}</span>}
+            {person.role && <div className="attendance-modal-pills"><span className="attendance-modal-pill">{person.role}</span></div>}
+          </div>
         </div>
         <button type="button" className="icon-button attendance-modal-close" aria-label="Close" onClick={onClose}><Icon name="x" size={18} /></button>
+        {dailyQuota > 0 && <div className={`quota-progress ${quotaReached ? 'is-reached' : ''}`}>
+          <div className="quota-progress-head"><span>Calls today</span><strong>{todayCalls}<small> / {dailyQuota}</small></strong></div>
+          <div className="quota-progress-track" role="progressbar" aria-label="Calls today against the daily quota" aria-valuemin={0} aria-valuemax={dailyQuota} aria-valuenow={Math.min(todayCalls, dailyQuota)}><div className="quota-progress-fill" style={{ width: `${Math.min(100, (todayCalls / dailyQuota) * 100)}%` }} /></div>
+          <small className="quota-progress-note">{quotaReached ? (todayCalls > dailyQuota ? `Quota reached — ${todayCalls - dailyQuota} over` : 'Quota reached') : `${dailyQuota - todayCalls} more to reach the quota`}</small>
+        </div>}
       </div>
-      <p className="stat-modal-section-label">Calls in {periodPhrase(monthLabel)}</p>
-      <AgentCallsSection agentName={agentName} displayName={person.name} perTab={perTab} agentCalls={agentCalls} monthTotal={monthTotal} monthLabel={monthLabel} />
       <p className="stat-modal-section-label">Attendance (last 7 days)</p>
       <AttendanceSection person={person} />
+      <p className="stat-modal-section-label">Calls in {periodPhrase(monthLabel)}</p>
+      <AgentCallsSection agentName={agentName} displayName={person.name} perTab={perTab} agentCalls={agentCalls} monthTotal={monthTotal} monthLabel={monthLabel} />
     </div>
   </div>
 }
@@ -828,7 +843,7 @@ function WeeklyCallsTable({ people, callCounts, dailyByDate, year, month }) {
 }
 
 const EMPLOYEE_TIP_WIDTH = 252
-const EMPLOYEE_TIP_HEIGHT_ESTIMATE = 330
+const EMPLOYEE_TIP_HEIGHT_ESTIMATE = 396
 const EMPLOYEE_TIP_GAP = 12
 const ATTENDANCE_CACHE_MS = 5 * 60 * 1000
 // Hovering several rows back and forth shouldn't refetch the same month every time.
@@ -861,7 +876,26 @@ function useMonthAttendanceCounts(personId, monthOffset) {
   return result.key === key ? result : { key }
 }
 
-function EmployeeHoverTip({ person, anchorRect, container, agentCalls, monthTotal, monthLabel, monthOffset, loadingCalls = false }) {
+const TODAY_RING_SIZE = 46
+const TODAY_RING_STROKE = 6
+const TODAY_RING_RADIUS = (TODAY_RING_SIZE - TODAY_RING_STROKE) / 2
+const TODAY_RING_CIRCUMFERENCE = 2 * Math.PI * TODAY_RING_RADIUS
+
+// A small donut of one person's calls today against the daily quota: blue while under it, green
+// once it is reached, and a gold second lap for calls beyond it (same colours as the workspace donut).
+function TodayQuotaRing({ calls, quota }) {
+  const reached = calls >= quota
+  const first = Math.min(1, calls / quota) * TODAY_RING_CIRCUMFERENCE
+  const bonus = Math.min(1, Math.max(0, calls / quota - 1)) * TODAY_RING_CIRCUMFERENCE
+  const common = { cx: TODAY_RING_SIZE / 2, cy: TODAY_RING_SIZE / 2, r: TODAY_RING_RADIUS, fill: 'none', strokeWidth: TODAY_RING_STROKE, transform: `rotate(-90 ${TODAY_RING_SIZE / 2} ${TODAY_RING_SIZE / 2})` }
+  return <svg className="employee-tip-today-ring" width={TODAY_RING_SIZE} height={TODAY_RING_SIZE} viewBox={`0 0 ${TODAY_RING_SIZE} ${TODAY_RING_SIZE}`} aria-hidden="true">
+    <circle {...common} stroke="var(--blue-soft)" />
+    {first > 0 && <circle {...common} stroke={reached ? '#16a34a' : 'var(--blue)'} strokeLinecap="round" strokeDasharray={`${first} ${TODAY_RING_CIRCUMFERENCE}`} />}
+    {bonus > 0 && <circle {...common} stroke="#f59e0b" strokeLinecap="round" strokeDasharray={`${bonus} ${TODAY_RING_CIRCUMFERENCE}`} />}
+  </svg>
+}
+
+function EmployeeHoverTip({ person, anchorRect, container, agentCalls, todayCalls, dailyQuota, monthTotal, monthLabel, monthOffset, loadingCalls = false }) {
   const { counts, error } = useMonthAttendanceCounts(person.id, monthOffset)
   const total = counts ? ATTENDANCE_STATUSES.reduce((sum, status) => sum + counts[status].length, 0) : 0
   const percent = monthTotal > 0 ? Math.round((agentCalls / monthTotal) * 100) : 0
@@ -880,6 +914,14 @@ function EmployeeHoverTip({ person, anchorRect, container, agentCalls, monthTota
       <small>Total calls · {monthLabel}</small>
       <div><strong>{loadingCalls ? '…' : agentCalls}</strong><span>{loadingCalls ? 'Loading...' : `${percent}% of team`}</span></div>
     </div>
+    {dailyQuota > 0 && <div className="employee-tip-today">
+      <TodayQuotaRing calls={todayCalls} quota={dailyQuota} />
+      <div>
+        <small>Calls today</small>
+        <strong>{loadingCalls ? '…' : todayCalls}<span> / {dailyQuota}</span></strong>
+        <em>{loadingCalls ? 'Loading...' : todayCalls >= dailyQuota ? (todayCalls > dailyQuota ? `${todayCalls - dailyQuota} over the quota` : 'Quota reached') : `${dailyQuota - todayCalls} to go`}</em>
+      </div>
+    </div>}
     <div className="employee-tip-attendance">
       <small>Attendance · {monthLabel}</small>
       {error ? <p className="team-status-message team-status-error">Couldn't load.</p> : !counts ? <p className="team-status-message">Loading attendance...</p> : <>
@@ -896,8 +938,10 @@ function EmployeeHoverTip({ person, anchorRect, container, agentCalls, monthTota
 // The online / offline list. In the client dashboard each row opens that person's call and
 // attendance stats (and shows them on hover). Without `onSelectPerson` and the call totals —
 // the employee workspace has neither — it is a plain read-only list.
-export function OnlineEmployeesPanel({ people, onSelectPerson, monthlyCallTotals, monthTotal, monthLabel, monthOffset, className = '', onActivate, callsLoading = false }) {
+export function OnlineEmployeesPanel({ people, onSelectPerson, monthlyCallTotals, todayCallTotals, monthTotal, monthLabel, monthOffset, className = '', onActivate, callsLoading = false }) {
   const interactive = Boolean(onSelectPerson && monthlyCallTotals)
+  const [dailyQuota, setDailyQuota] = useState(null)
+  useEffect(() => subscribeToCallQuota(setDailyQuota, (err) => console.warn('[quota] unavailable:', err.message)), [])
   const onlinePeople = useMemo(() => people.filter((person) => person.online), [people])
   const offlinePeople = useMemo(() => people.filter((person) => !person.online), [people])
   const scrollRef = useRef(null)
@@ -945,7 +989,7 @@ export function OnlineEmployeesPanel({ people, onSelectPerson, monthlyCallTotals
       <div className="online-mini-divider" role="separator"><span>Offline</span></div>
       {offlinePeople.length ? offlinePeople.map(renderRow) : <p className="empty-table">{people.length ? 'Everyone is online.' : 'No employees yet.'}</p>}
     </div>
-    {hovered && interactive && <EmployeeHoverTip loadingCalls={callsLoading} person={hovered.person} anchorRect={hovered.rect} container={hovered.container} agentCalls={monthlyCallTotals[agentNameFor(hovered.person, people, monthlyCallTotals)] || 0} monthTotal={monthTotal} monthLabel={monthLabel} monthOffset={monthOffset} />}
+    {hovered && interactive && <EmployeeHoverTip loadingCalls={callsLoading} person={hovered.person} anchorRect={hovered.rect} container={hovered.container} agentCalls={monthlyCallTotals[agentNameFor(hovered.person, people, monthlyCallTotals)] || 0} todayCalls={todayCallTotals?.[agentNameFor(hovered.person, people, todayCallTotals || {})] || 0} dailyQuota={dailyQuota} monthTotal={monthTotal} monthLabel={monthLabel} monthOffset={monthOffset} />}
   </section>
 }
 
@@ -955,8 +999,10 @@ export function OnlineEmployeesPanel({ people, onSelectPerson, monthlyCallTotals
 export function TeamOnlinePanel({ people, className = '', callsResult, callsLoading = false }) {
   const [selectedPerson, setSelectedPerson] = useState(null)
   const { year, month, monthStart, monthEnd } = useDailyCalls(callsResult, 0)
+  const todayKey = useWorkDate()
   const perTab = useMemo(() => callsResult?.perTab || [], [callsResult])
   const daily = callsResult?.daily
+  const todayCallTotals = daily?.[todayKey]
   const monthlyCallTotals = useMemo(() => {
     const totals = {}
     for (const [date, dayCounts] of Object.entries(daily || {})) {
@@ -969,8 +1015,8 @@ export function TeamOnlinePanel({ people, className = '', callsResult, callsLoad
   const monthLabel = new Date(year, month, 1).toLocaleDateString(undefined, { month: 'long' })
 
   return <>
-    <OnlineEmployeesPanel people={people} className={className} onSelectPerson={setSelectedPerson} callsLoading={callsLoading} monthlyCallTotals={monthlyCallTotals} monthTotal={monthTotal} monthLabel={monthLabel} monthOffset={0} />
-    {selectedPerson && <EmployeeStatsModal person={selectedPerson} people={people} monthlyCallTotals={monthlyCallTotals} monthTotal={monthTotal} monthLabel={monthLabel} perTab={perTab} onClose={() => setSelectedPerson(null)} />}
+    <OnlineEmployeesPanel people={people} className={className} onSelectPerson={setSelectedPerson} callsLoading={callsLoading} monthlyCallTotals={monthlyCallTotals} todayCallTotals={todayCallTotals} monthTotal={monthTotal} monthLabel={monthLabel} monthOffset={0} />
+    {selectedPerson && <EmployeeStatsModal person={selectedPerson} people={people} monthlyCallTotals={monthlyCallTotals} todayCallTotals={todayCallTotals} monthTotal={monthTotal} monthLabel={monthLabel} perTab={perTab} onClose={() => setSelectedPerson(null)} />}
   </>
 }
 
@@ -1408,7 +1454,7 @@ export function ClientDashboard({ people, peopleLoading = false, showOnlinePanel
               </div>
             }) : <p className="empty-table">No handler data found in that sheet.</p>}</div>
           </section>
-          {showOnlinePanel && <OnlineEmployeesPanel people={people} onSelectPerson={setSelectedPerson} monthlyCallTotals={monthlyCallTotals} monthTotal={monthlyTotalAllAgents} monthLabel={monthLabel} monthOffset={monthOffset} />}
+          {showOnlinePanel && <OnlineEmployeesPanel people={people} onSelectPerson={setSelectedPerson} monthlyCallTotals={monthlyCallTotals} todayCallTotals={daily?.[dailyToday]} monthTotal={monthlyTotalAllAgents} monthLabel={monthLabel} monthOffset={monthOffset} />}
         </div>
         {sheetUrl && <CallsTrendPanel daily={callsResult?.daily} people={people} loading={callsLoading} monthOffset={calendarOffset} />}
         {hasClosedTabs && <ClosedAppointmentsPanel appointments={closedAppointments} people={people} />}
@@ -1424,7 +1470,7 @@ export function ClientDashboard({ people, peopleLoading = false, showOnlinePanel
 
         {pendingExport && <ExportConfirmModal format={pendingExport} monthLabel={new Date(dailyYear, dailyMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })} employeeCount={dailyCallCounts.length} busy={Boolean(exporting)} onCancel={() => setPendingExport(null)} onConfirm={async () => { await exportReport(pendingExport); setPendingExport(null) }} />}
 
-        {selectedPerson && <EmployeeStatsModal person={selectedPerson} people={people} monthlyCallTotals={monthlyCallTotals} monthTotal={monthlyTotalAllAgents} monthLabel={monthLabel} perTab={perTab} onClose={() => setSelectedPerson(null)} />}
+        {selectedPerson && <EmployeeStatsModal person={selectedPerson} people={people} monthlyCallTotals={monthlyCallTotals} todayCallTotals={daily?.[dailyToday]} monthTotal={monthlyTotalAllAgents} monthLabel={monthLabel} perTab={perTab} onClose={() => setSelectedPerson(null)} />}
 
         {openStatModal === 'attendance' && topPerson && <TopAttendanceModal person={topPerson} onClose={() => setOpenStatModal(null)} />}
         {openStatModal === 'agent' && topAgentName && <TopAgentModal agentName={topAgentName} displayName={topAgentMatch?.name || topAgentName} avatar={topAgentMatch?.profileImg ? <img className="avatar avatar-photo avatar-large" src={topAgentMatch.profileImg} alt="" /> : <Avatar initials={initialsOf(topAgentMatch?.name || topAgentName)} color={topAgentMatch?.color || colorFor(topAgentName)} large />} perTab={perTab} agentCalls={topAgentCalls} monthTotal={monthlyTotalAllAgents} monthLabel={monthLabel} onClose={() => setOpenStatModal(null)} />}

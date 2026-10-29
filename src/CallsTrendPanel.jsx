@@ -15,6 +15,7 @@ import { workDateKey, workMonth } from './shared/workCalendar'
 // it is also multiplied by the number of employees.
 const VIEWS = [['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly']]
 const TEAM = '__team'
+const EMPLOYEE = '__employee'
 const WEEKS_SHOWN = 12
 const MONTHS_SHOWN = 12
 const HEIGHT = 260
@@ -57,7 +58,10 @@ function useElementWidth(ref) {
   return width
 }
 
-export default function CallsTrendPanel({ daily, people, loading, monthOffset = 0 }) {
+// With `employee` (a person from `people`) the graph is that one person's: no picker, and the
+// target is a single day's quota rather than the team's. The sheet can name one person under
+// more than one handler name, so every name that resolves to them is counted.
+export default function CallsTrendPanel({ daily, people, loading, monthOffset = 0, employee = null }) {
   const [view, setView] = useState('daily')
   const [scope, setScope] = useState(TEAM)
   const [quota, setQuota] = useState(0)
@@ -86,12 +90,17 @@ export default function CallsTrendPanel({ daily, people, loading, monthOffset = 
     ...handlerNames.map((name) => ({ value: name, label: matchEmployeeByName(name, people)?.name || name })).sort((a, b) => a.label.localeCompare(b.label)),
   ], [handlerNames, people])
   // A picked employee who no longer has calls falls back to the team rather than an empty chart.
-  const activeScope = scope === TEAM || handlerNames.includes(scope) ? scope : TEAM
+  const activeScope = employee ? EMPLOYEE : scope === TEAM || handlerNames.includes(scope) ? scope : TEAM
+  const employeeNames = useMemo(
+    () => (employee ? handlerNames.filter((name) => matchEmployeeByName(name, people)?.id === employee.id) : []),
+    [employee, handlerNames, people],
+  )
 
   const { points, unit } = useMemo(() => {
     const valueOn = (key) => {
       const dayCounts = daily?.[key]
       if (!dayCounts) return 0
+      if (activeScope === EMPLOYEE) return employeeNames.reduce((sum, name) => sum + (dayCounts[name] || 0), 0)
       if (activeScope !== TEAM) return dayCounts[activeScope] || 0
       return Object.entries(dayCounts).reduce((sum, [name, count]) => (name.trim().toLowerCase() === 'available to call' ? sum : sum + count), 0)
     }
@@ -147,7 +156,7 @@ export default function CallsTrendPanel({ daily, people, loading, monthOffset = 
       }
     })
     return { points: days, unit: 'day' }
-  }, [daily, view, activeScope, quota, handlerNames, todayKey, monthOffset])
+  }, [daily, view, activeScope, employeeNames, quota, handlerNames, todayKey, monthOffset])
 
   const measured = points.filter((point) => point.value !== null)
   const total = measured.reduce((sum, point) => sum + point.value, 0)
@@ -186,9 +195,9 @@ export default function CallsTrendPanel({ daily, people, loading, monthOffset = 
 
   return <section className="panel calls-trend">
     <div className="panel-heading">
-      <div><h2>Calls trend</h2><p>{view === 'daily' ? 'Calls per day this month' : view === 'weekly' ? `Calls per week for the last ${WEEKS_SHOWN} weeks (weeks start on Monday)` : `Calls per month for the last ${MONTHS_SHOWN} months`} · {activeScope === TEAM ? 'whole team' : scopeOptions.find((option) => option.value === activeScope)?.label}</p></div>
+      <div><h2>Calls trend</h2><p>{view === 'daily' ? 'Calls per day this month' : view === 'weekly' ? `Calls per week for the last ${WEEKS_SHOWN} weeks (weeks start on Monday)` : `Calls per month for the last ${MONTHS_SHOWN} months`} · {activeScope === EMPLOYEE ? employee.name : activeScope === TEAM ? 'whole team' : scopeOptions.find((option) => option.value === activeScope)?.label}</p></div>
       <div className="panel-heading-actions calls-trend-controls">
-        <CustomSelect value={activeScope} onChange={setScope} options={scopeOptions} ariaLabel="Whose calls to show" align="right" />
+        {!employee && <CustomSelect value={activeScope} onChange={setScope} options={scopeOptions} ariaLabel="Whose calls to show" align="right" />}
         <div className="view-toggle" role="group" aria-label="Trend period">
           {VIEWS.map(([value, label]) => <button type="button" key={value} className={`view-toggle-option ${view === value ? 'active' : ''}`} aria-pressed={view === value} onClick={() => { setView(value); setHover(null) }}>{label}</button>)}
         </div>

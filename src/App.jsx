@@ -31,7 +31,7 @@ import AppointmentCelebration from './AppointmentCelebration'
 import ClientView, { AttendanceLogPage, ClientDashboard } from './ClientView'
 import ManagementPage from './ManagementPage'
 import QuotaDonut from './QuotaDonut'
-import { WorkspaceCallsProvider, WorkspaceTeamPanel } from './WorkspaceCalls'
+import { WorkspaceCallsProvider, WorkspaceTeamPanel, WorkspaceTrendPanel } from './WorkspaceCalls'
 import LoginPage from './LoginPage'
 import VisitorLoginPage from './VisitorLoginPage'
 
@@ -182,6 +182,7 @@ function Dashboard() {
       <div style={{ display: dashboardView === 'Workspace' ? 'contents' : 'none' }}><div className="content"><div className="page-heading has-announcements"><QuotaDonut user={user} updaterName={displayName} people={people} todayLabel={todayLabel} canSetQuota={canSetCallQuota(profile?.role)} /><div className="page-heading-announcements"><Announcements user={user} authorName={displayName} canPost={canPostAnnouncements(profile?.role)} /></div></div>
       <div className="dashboard-grid"><section className="panel notes-panel"><div className="panel-heading"><div><h2>Overall notes</h2><p>Shared with everyone in your workspace</p></div><button type="button" className="subtle-button" onClick={() => document.querySelector('.note-composer input')?.focus()}><Icon name="plus" size={16} /> Add note</button></div><div className="note-composer">{profile?.photoUrl ? <img className="avatar avatar-photo avatar-small" src={profile.photoUrl} alt="" /> : <Avatar initials={displayInitials} color={colorFor(user.uid)} small />}<MentionInput value={note} onChange={setNote} onSubmit={postNote} people={people} placeholder="Share an update with the team... (type @ to mention)" /><button type="button" onClick={postNote} disabled={!note.trim() || postingNote}>Post</button></div><div className="note-list">{sortedNotes.length ? sortedNotes.map((item) => <TimelineNote key={item.id} note={item} currentUser={currentUser} />) : <p className="empty-table">No notes yet. Share the first update with your team.</p>}</div></section>
         {teamLoading ? <section className="panel online-mini-panel team-panel"><p className="team-status-message">Loading team status...</p></section> : teamError ? <section className="panel online-mini-panel team-panel"><p className="team-status-message team-status-error">Couldn't load team status: {teamError}</p></section> : <WorkspaceTeamPanel people={people} className="team-panel" />}</div>
+      <WorkspaceTrendPanel people={people} userEmail={user.email} />
     </div></div>
       {(openedViews.has('Overview') || dashboardView === 'Overview') && <div style={{ display: dashboardView === 'Overview' ? 'contents' : 'none' }}><div className="dashboard-overview-wrap"><ClientDashboard people={people} peopleLoading={teamLoading} /></div></div>}
       {(openedViews.has('Attendance Log') || dashboardView === 'Attendance Log') && <div style={{ display: dashboardView === 'Attendance Log' ? 'contents' : 'none' }}><AttendanceLogPage people={people} /></div>}
